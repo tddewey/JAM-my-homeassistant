@@ -16,31 +16,31 @@ detection:
   # Adjust these based on your capture resolution and screen layout
   score_regions:
     player1:
-      x: 1160      # Left edge of score region
-      y: 875       # Top edge of score region
-      width: 315   # Width of score region
-      height: 100  # Height of score region
+      x: 460      # Left edge of score region
+      y: 348       # Top edge of score region
+      width: 125   # Width of score region
+      height: 40  # Height of score region
     player2:
-      x: 1160
-      y: 965
-      width: 315
-      height: 100
+      x: 460
+      y: 381
+      width: 125
+      height: 40
   
   # Region where quarter/period text appears (e.g., "1st quarter", "halftime", "final")
   # This text appears when scores update, quarters begin, or quarters end
   quarter_text_region:
-    x: 230        # Left edge of quarter text region
-    y: 1075        # Top edge of quarter text region
-    width: 620     # Width of quarter text region
-    height: 90     # Height of quarter text region
+    x: 90        # Left edge of quarter text region
+    y: 426        # Top edge of quarter text region
+    width: 245     # Width of quarter text region
+    height: 36     # Height of quarter text region
   
   # Region for team selection heading text
   # Used to distinguish pre-game ("PRESS SHOOT TO SELECT") vs halftime ("SUBSTITUTIONS")
   team_selection_heading_region:
-    x: 300        # Left edge of heading region
-    y: 30         # Top edge of heading region
-    width: 1020     # Width of heading region
-    height: 110     # Height of heading region
+    x: 120        # Left edge of heading region
+    y: 11         # Top edge of heading region
+    width: 404     # Width of heading region
+    height: 44     # Height of heading region
   
   # Motion detection threshold (0.0 to 1.0, lower = more sensitive)
   motion_threshold: 0.1
