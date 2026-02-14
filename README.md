@@ -30,6 +30,7 @@ This system captures video from an NBA Jam arcade cabinet via HDMI capture card,
 On your Raspberry Pi (Debian Trixie), clone the repository to a suitable location:
 
 **Recommended location:** `/opt/nba-jam-detector` (for system-wide installation)
+Requires `sudo` for initial setup, but provides better organization.
 ```bash
 sudo git clone https://github.com/tddewey/JAM-my-homeassistant.git /opt/nba-jam-detector
 sudo chown -R $USER:$USER /opt/nba-jam-detector
@@ -37,23 +38,61 @@ cd /opt/nba-jam-detector
 ```
 
 **Alternative location:** User home directory (for user-specific installation)
+Suitable for user-specific installation and testing. Easier to manage without `sudo`.
 ```bash
 cd ~
 git clone https://github.com/tddewey/JAM-my-homeassistant.git
 cd JAM-my-homeassistant
 ```
 
+
 ### Install Dependencies
 
 1. Install system dependencies:
 ```bash
 sudo apt-get update
-sudo apt-get install -y tesseract-ocr libtesseract-dev python3-pip
+sudo apt-get install -y tesseract-ocr libtesseract-dev python3-pip python3-venv python3-full
 ```
 
-2. Install Python dependencies:
+2. Create and activate a virtual environment:
 ```bash
-pip3 install -r requirements.txt
+python3 -m venv venv
+source venv/bin/activate
+```
+
+3. Install Python dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+**Note:** You'll need to activate the virtual environment each time you work with the project:
+```bash
+source venv/bin/activate
+```
+
+To deactivate the virtual environment when you're done:
+```bash
+deactivate
+```
+
+**Troubleshooting:** If you get an "externally-managed-environment" error even after activating the venv, the venv was likely created before `python3-full` was installed. Fix it by:
+
+1. Deactivate the venv (if active):
+```bash
+deactivate
+```
+
+2. Remove the old venv and recreate it:
+```bash
+rm -rf venv
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Make sure `python3-full` is installed before recreating the venv:
+```bash
+sudo apt-get install -y python3-full
 ```
 
 ### Configuration
@@ -73,10 +112,7 @@ cp config.yaml.example config.yaml
 
    **Note:** Detection regions may vary depending on your video shaders and RetroArch configurations. Use visualization mode (`--visualize`) to calibrate these regions.
 
-### Location Recommendations
 
-- **`/opt/nba-jam-detector`**: Recommended for organized installation. Requires `sudo` for initial setup, but provides better organization.
-- **`~/JAM-my-homeassistant`**: Suitable for user-specific installation and testing. Easier to manage without `sudo`.
 
 ### Running with RetroArch (NBA JAM TE)
 
@@ -85,7 +121,8 @@ When launching NBA JAM TE through RetroArch, start the detector before launching
 **Start the detector:**
 ```bash
 cd /opt/nba-jam-detector  # or ~/JAM-my-homeassistant
-python3 main.py &
+source venv/bin/activate
+python main.py &
 ```
 
 The detector will run in the background and monitor the video feed. You can then launch NBA JAM TE from RetroArch.
@@ -109,6 +146,7 @@ kill <PID>
 
 Before running the main script, check your capture device:
 ```bash
+source venv/bin/activate
 python diagnose_device.py /dev/video0
 ```
 
@@ -121,6 +159,7 @@ This will show:
 
 Run the main detection script:
 ```bash
+source venv/bin/activate
 python main.py
 ```
 
@@ -155,6 +194,7 @@ The script will:
 
 After testing or party cleanup, remove MQTT entities:
 ```bash
+source venv/bin/activate
 python cleanup_mqtt.py
 ```
 
@@ -224,7 +264,7 @@ The text appears reliably when:
 1. **Diagnose device**: Run `diagnose_device.py` to check codec
 2. **Configure text regions**: Set up `quarter_text_region` and `team_selection_heading_region` in config
 3. **Start with MQTT disabled**: Set `mqtt.enabled: false` in config
-4. **Use visualization mode**: Run `python main.py --visualize` to calibrate regions
+4. **Use visualization mode**: Run `source venv/bin/activate && python main.py --visualize` to calibrate regions
 5. **Monitor performance**: Use `--monitor-cpu` to tune frame_interval
 6. **Validate detection**: Watch console output to verify accuracy
 7. **Adjust regions**: Fine-tune score region coordinates in config
