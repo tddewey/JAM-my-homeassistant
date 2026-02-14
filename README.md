@@ -2,6 +2,8 @@
 
 This system captures video from an NBA Jam arcade cabinet via HDMI capture card, detects game state and scores, and publishes MQTT messages for Home Assistant integration.
 
+**GitHub Repository:** https://github.com/tddewey/JAM-my-homeassistant
+
 ## Features
 
 - **Game State Detection**: Detects `team_selection`, `in_progress`, `half_time`, and `game_over` states
@@ -23,18 +25,83 @@ This system captures video from an NBA Jam arcade cabinet via HDMI capture card,
 
 ## Installation
 
+### Clone the Repository
+
+On your Raspberry Pi (Debian Trixie), clone the repository to a suitable location:
+
+**Recommended location:** `/opt/nba-jam-detector` (for system-wide installation)
+```bash
+sudo git clone https://github.com/tddewey/JAM-my-homeassistant.git /opt/nba-jam-detector
+sudo chown -R $USER:$USER /opt/nba-jam-detector
+cd /opt/nba-jam-detector
+```
+
+**Alternative location:** User home directory (for user-specific installation)
+```bash
+cd ~
+git clone https://github.com/tddewey/JAM-my-homeassistant.git
+cd JAM-my-homeassistant
+```
+
+### Install Dependencies
+
 1. Install system dependencies:
 ```bash
 sudo apt-get update
-sudo apt-get install -y tesseract-ocr libtesseract-dev
+sudo apt-get install -y tesseract-ocr libtesseract-dev python3-pip
 ```
 
 2. Install Python dependencies:
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
-3. Configure the system by editing `config.yaml` (create from `config.yaml.example`). This includes confirming the detection regions, which may be different depending on your video shaders and other retroarch configurations.
+### Configuration
+
+3. Create your configuration file:
+```bash
+cp config.yaml.example config.yaml
+```
+
+4. Edit `config.yaml` to configure:
+   - Video capture device path (typically `/dev/video0` or `/dev/video1`)
+   - Score detection regions (player1 and player2)
+   - Quarter/period text detection region
+   - Team selection heading detection region
+   - MQTT broker settings (if enabled)
+   - Performance tuning settings
+
+   **Note:** Detection regions may vary depending on your video shaders and RetroArch configurations. Use visualization mode (`--visualize`) to calibrate these regions.
+
+### Location Recommendations
+
+- **`/opt/nba-jam-detector`**: Recommended for organized installation. Requires `sudo` for initial setup, but provides better organization.
+- **`~/JAM-my-homeassistant`**: Suitable for user-specific installation and testing. Easier to manage without `sudo`.
+
+### Running with RetroArch (NBA JAM TE)
+
+When launching NBA JAM TE through RetroArch, start the detector before launching the game:
+
+**Start the detector:**
+```bash
+cd /opt/nba-jam-detector  # or ~/JAM-my-homeassistant
+python3 main.py &
+```
+
+The detector will run in the background and monitor the video feed. You can then launch NBA JAM TE from RetroArch.
+
+**Stop the detector:**
+```bash
+pkill -f "python3.*main.py"
+```
+
+Or find the process ID and kill it:
+```bash
+ps aux | grep "python3.*main.py"
+kill <PID>
+```
+
+**Tip:** You can create a simple start/stop script or add these commands to your RetroArch launch script to automate starting and stopping the detector with the game.
 
 ## Usage
 
