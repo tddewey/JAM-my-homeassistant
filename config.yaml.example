@@ -67,3 +67,13 @@ tuning:
   # Interval between metrics display (seconds)
   metrics_interval: 10
 
+screenshots:
+  # Enable screenshot capture (can be overridden with --save-screenshots CLI flag)
+  enabled: false
+  # Directory to save screenshots (default: ~/nba-jam-screenshots)
+  directory: ~/nba-jam-screenshots
+  # Maximum number of screenshots to keep (0 = unlimited)
+  max_count: 20
+  # Maximum age in days before deletion (0 = no age limit)
+  max_age_days: 7
+

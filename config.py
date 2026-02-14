@@ -63,12 +63,22 @@ class TuningConfig:
 
 
 @dataclass
+class ScreenshotConfig:
+    """Screenshot capture configuration."""
+    enabled: bool
+    directory: str
+    max_count: int  # Maximum number of screenshots to keep
+    max_age_days: int  # Maximum age in days before deletion
+
+
+@dataclass
 class Config:
     """Main configuration class."""
     video: VideoConfig
     detection: DetectionConfig
     mqtt: MQTTConfig
     tuning: TuningConfig
+    screenshots: ScreenshotConfig
 
     @classmethod
     def load(cls, config_path: str = "config.yaml") -> "Config":
@@ -158,10 +168,20 @@ class Config:
             metrics_interval=tuning_data.get('metrics_interval', 10)
         )
 
+        # Load screenshot config
+        screenshot_data = data.get('screenshots', {})
+        screenshot_config = ScreenshotConfig(
+            enabled=screenshot_data.get('enabled', False),
+            directory=os.path.expanduser(screenshot_data.get('directory', '~/nba-jam-screenshots')),
+            max_count=screenshot_data.get('max_count', 100),
+            max_age_days=screenshot_data.get('max_age_days', 7)
+        )
+
         return cls(
             video=video_config,
             detection=detection_config,
             mqtt=mqtt_config,
-            tuning=tuning_config
+            tuning=tuning_config,
+            screenshots=screenshot_config
         )
 

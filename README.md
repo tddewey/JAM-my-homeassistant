@@ -109,35 +109,9 @@ cp config.yaml.example config.yaml
    - MQTT broker settings (if enabled)
    - Performance tuning settings
 
-   **Note:** Detection regions may vary depending on your video shaders and RetroArch configurations. Adjust the coordinates in the config file based on your setup.
+   **Note:** Detection regions may vary depending on your video capture setup. Adjust the coordinates in the config file based on your screen layout.
 
 
-
-### Running with RetroArch (NBA JAM TE)
-
-When launching NBA JAM TE through RetroArch, start the detector before launching the game:
-
-**Start the detector:**
-```bash
-cd /opt/nba-jam-detector  # or ~/JAM-my-homeassistant
-source venv/bin/activate
-python main.py &
-```
-
-The detector will run in the background and monitor the video feed. You can then launch NBA JAM TE from RetroArch.
-
-**Stop the detector:**
-```bash
-pkill -f "python3.*main.py"
-```
-
-Or find the process ID and kill it:
-```bash
-ps aux | grep "python3.*main.py"
-kill <PID>
-```
-
-**Tip:** You can create a simple start/stop script or add these commands to your RetroArch launch script to automate starting and stopping the detector with the game.
 
 ## Usage
 
@@ -170,6 +144,9 @@ python main.py
 # With CPU monitoring
 python main.py --monitor-cpu
 
+# Enable screenshot capture
+python main.py --save-screenshots
+
 # Custom metrics interval
 python main.py --monitor-cpu --metrics-interval 5
 ```
@@ -181,6 +158,79 @@ The script will:
 - Display codec information at startup
 - Show performance metrics periodically (if enabled)
 - Optionally publish to MQTT if enabled in config
+
+### How to Stop the Detector
+
+**Foreground Mode (running without `&`):**
+- Press `Ctrl+C` to stop the detector gracefully
+
+**Background Mode (running with `&`):**
+When running in the background with `python main.py &`, Ctrl+C won't work. Use one of these methods:
+
+1. **Using PID file (recommended):**
+   ```bash
+   kill $(cat ~/.nba-jam-detector.pid)
+   ```
+
+2. **Using process name:**
+   ```bash
+   pkill -f "python.*main.py"
+   ```
+
+3. **Find and kill manually:**
+   ```bash
+   ps aux | grep "python.*main.py"
+   kill <PID>
+   ```
+
+The PID file is automatically created at `~/.nba-jam-detector.pid` (or custom path with `--pid-file`). It's automatically cleaned up when the process exits normally.
+
+### Screenshot Capture
+
+The detector can capture annotated screenshots when game state changes. This is useful for debugging detection regions and verifying accuracy.
+
+**Enable Screenshot Capture:**
+
+1. **Via CLI flag:**
+   ```bash
+   python main.py --save-screenshots
+   ```
+
+2. **Via config file:**
+   Edit `config.yaml` and set:
+   ```yaml
+   screenshots:
+     enabled: true
+   ```
+
+**Configuration Options:**
+
+Screenshots are configured in `config.yaml`:
+```yaml
+screenshots:
+  enabled: false                    # Enable/disable (can override with --save-screenshots)
+  directory: ~/nba-jam-screenshots  # Directory to save screenshots
+  max_count: 100                    # Maximum number of screenshots to keep (0 = unlimited)
+  max_age_days: 7                   # Maximum age in days before deletion (0 = no age limit)
+```
+
+**Screenshot Features:**
+- Screenshots are captured automatically when game state changes
+- Each screenshot is annotated with:
+  - Detection region rectangles (score regions, text regions)
+  - Current game state
+  - Current scores
+  - Timestamp
+  - Frame resolution
+- Old screenshots are automatically cleaned up based on `max_count` and `max_age_days`
+- Screenshots are saved in the configured directory (default: `~/nba-jam-screenshots`)
+
+**Screenshot Naming:**
+Format: `screenshot_YYYY-MM-DD_HH-MM-SS_STATE_p1-SCORE_p2-SCORE.jpg`
+
+Example: `screenshot_2026-02-14_15-30-45_q1_p1-10_p2-5.jpg`
+
+**Note:** The screenshot directory defaults to your home directory (`~/nba-jam-screenshots`) for easy access via SFTP.
 
 ### Cleanup Script
 
@@ -240,7 +290,7 @@ detection:
 ### How It Works
 
 - **Quarter/Period Text**: Detects text like "1st quarter", "2nd quarter", "halftime", "3rd quarter", "4th quarter", "final", "end of first quarter", etc.
-- **Team Selection Heading**: Distinguishes pre-game ("PRESS SHOOT TO SELECT") from halftime ("SUBSTITUTIONS")
+- **Team Selection Heading**: Detects pre-game ("PRESS SHOOT TO SELECT") to trigger PLAYING state
 
 The text appears reliably when:
 - Scores update

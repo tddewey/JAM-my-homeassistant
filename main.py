@@ -2,11 +2,13 @@
 """Main entry point for NBA Jam video detection system."""
 
 import sys
+import os
 import time
 import signal
 import argparse
 import cv2
 from datetime import datetime
+from pathlib import Path
 from colorama import init, Fore, Style
 
 from config import Config
@@ -15,6 +17,7 @@ from detectors.score_detector import ScoreDetector
 from detectors.state_detector import StateDetector, GameState
 from mqtt_client import MQTTClient
 from performance_monitor import PerformanceMonitor
+from screenshot_manager import ScreenshotManager
 
 # Initialize colorama for colored console output
 init(autoreset=True)
@@ -24,13 +27,14 @@ class NBAJamDetector:
     """Main detector class that orchestrates all components."""
 
     def __init__(self, config: Config, monitor_cpu: bool = False, 
-                 metrics_interval: int = 10):
+                 metrics_interval: int = 10, save_screenshots: bool = False):
         """Initialize detector.
         
         Args:
             config: Configuration object
             monitor_cpu: Override config to enable CPU monitoring
             metrics_interval: Override config for metrics interval
+            save_screenshots: Override config to enable screenshot capture
         """
         self.config = config
         self.running = False
@@ -38,6 +42,7 @@ class NBAJamDetector:
         # Override config with CLI args if provided
         self.monitor_cpu = monitor_cpu or config.tuning.monitor_cpu
         self.metrics_interval = metrics_interval or config.tuning.metrics_interval
+        self.save_screenshots = save_screenshots or config.screenshots.enabled
         
         # Initialize components
         self.video_capture = VideoCapture(config.video)
@@ -45,11 +50,15 @@ class NBAJamDetector:
         self.state_detector = StateDetector(config.detection)
         self.mqtt_client = MQTTClient(config.mqtt)
         self.performance_monitor = PerformanceMonitor() if self.monitor_cpu else None
+        self.screenshot_manager = ScreenshotManager(config.screenshots) if self.save_screenshots else None
         
         # Track last published values
         self.last_published_state = None
         self.last_published_scores = {'player1': None, 'player2': None}
         self.last_metrics_display = time.time()
+        
+        # Track last state for screenshot capture
+        self.last_state = None
 
     def log(self, message: str, color: str = ""):
         """Log message with timestamp.
@@ -203,6 +212,18 @@ class NBAJamDetector:
                 # Detect scores - score detector handles both grayscale and color
                 scores = self.score_detector.detect_scores(score_frame)
                 
+                # Capture screenshot on state change
+                if self.screenshot_manager and state != self.last_state:
+                    screenshot_path = self.screenshot_manager.capture_screenshot(
+                        frame, state, scores, self.config.detection
+                    )
+                    if screenshot_path:
+                        self.log(f"Screenshot saved: {screenshot_path}", Fore.CYAN)
+                    self.last_state = state
+                elif self.last_state is None:
+                    # Initialize last_state on first frame
+                    self.last_state = state
+                
                 # Calculate processing time
                 processing_time = time.time() - frame_start
                 
@@ -254,17 +275,19 @@ class NBAJamDetector:
         self.running = False
 
 
-def signal_handler(sig, frame):
+def signal_handler(sig, frame, pid_file_path=None):
     """Handle interrupt signal."""
     print("\nInterrupt received, shutting down...")
+    if pid_file_path and pid_file_path.exists():
+        try:
+            pid_file_path.unlink()
+        except Exception:
+            pass
     sys.exit(0)
 
 
 def main():
     """Main entry point."""
-    # Set up signal handler
-    signal.signal(signal.SIGINT, signal_handler)
-    
     # Parse command line arguments
     parser = argparse.ArgumentParser(
         description='NBA Jam Video Detection System',
@@ -273,7 +296,8 @@ def main():
 Examples:
   python main.py                          # Normal mode
   python main.py --monitor-cpu            # With CPU monitoring
-  python main.py --metrics-interval 5     # Custom metrics interval
+  python main.py --save-screenshots       # Enable screenshot capture
+  python main.py --monitor-cpu --metrics-interval 5     # Custom metrics interval
         """
     )
     parser.add_argument(
@@ -287,8 +311,40 @@ Examples:
         default=None,
         help='Interval between metrics display in seconds (default: from config)'
     )
+    parser.add_argument(
+        '--save-screenshots',
+        action='store_true',
+        help='Enable screenshot capture on state changes (overrides config)'
+    )
+    parser.add_argument(
+        '--pid-file',
+        type=str,
+        default=None,
+        help='Path to PID file (default: ~/.nba-jam-detector.pid)'
+    )
     
     args = parser.parse_args()
+    
+    # Set up PID file
+    pid_file_path = None
+    if args.pid_file:
+        pid_file_path = Path(os.path.expanduser(args.pid_file))
+    else:
+        pid_file_path = Path.home() / '.nba-jam-detector.pid'
+    
+    # Write PID file
+    try:
+        pid_file_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_file_path.write_text(str(os.getpid()))
+    except Exception as e:
+        print(f"Warning: Could not write PID file: {e}")
+    
+    # Update signal handler to clean up PID file
+    def cleanup_signal_handler(sig, frame):
+        signal_handler(sig, frame, pid_file_path)
+    
+    signal.signal(signal.SIGINT, cleanup_signal_handler)
+    signal.signal(signal.SIGTERM, cleanup_signal_handler)
     
     # Load configuration
     try:
@@ -306,9 +362,19 @@ Examples:
     detector = NBAJamDetector(
         config,
         monitor_cpu=args.monitor_cpu,
-        metrics_interval=args.metrics_interval
+        metrics_interval=args.metrics_interval,
+        save_screenshots=args.save_screenshots
     )
-    detector.run()
+    
+    try:
+        detector.run()
+    finally:
+        # Clean up PID file on exit
+        if pid_file_path and pid_file_path.exists():
+            try:
+                pid_file_path.unlink()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
