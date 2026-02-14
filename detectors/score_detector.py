@@ -23,7 +23,7 @@ class ScoreDetector:
             'player2': None
         }
 
-    def extract_region(self, frame: np.ndarray, region: ScoreRegion) -> np.ndarray:
+    def extract_region(self, frame: np.ndarray, region: ScoreRegion) -> Optional[np.ndarray]:
         """Extract score region from frame.
         
         Args:
@@ -31,15 +31,27 @@ class ScoreDetector:
             region: Score region coordinates
             
         Returns:
-            Extracted region as grayscale image
+            Extracted region as grayscale image, or None if region is invalid/empty
         """
+        # Check if frame is valid
+        if frame is None or frame.size == 0:
+            return None
+        
         h, w = frame.shape[:2]
         x1 = max(0, region.x)
         y1 = max(0, region.y)
         x2 = min(w, region.x + region.width)
         y2 = min(h, region.y + region.height)
         
+        # Check if region is valid (has positive dimensions)
+        if x2 <= x1 or y2 <= y1:
+            return None
+        
         roi = frame[y1:y2, x1:x2]
+        
+        # Check if extracted region is empty
+        if roi.size == 0:
+            return None
         
         # Convert to grayscale if needed
         if len(roi.shape) == 3:
@@ -47,7 +59,7 @@ class ScoreDetector:
         
         return roi
 
-    def detect_motion(self, current: np.ndarray, previous: Optional[np.ndarray], 
+    def detect_motion(self, current: Optional[np.ndarray], previous: Optional[np.ndarray], 
                      threshold: float) -> bool:
         """Detect motion in score region.
         
@@ -59,6 +71,9 @@ class ScoreDetector:
         Returns:
             True if motion detected, False otherwise
         """
+        if current is None:
+            return False  # Invalid current frame, no motion
+        
         if previous is None:
             return True  # First frame, always process
         
@@ -137,6 +152,10 @@ class ScoreDetector:
         
         # Extract score region
         region = self.extract_region(frame, region_config)
+        
+        # Check if region extraction failed
+        if region is None:
+            return self.last_scores[player]  # Return cached score if available
         
         # Check for motion
         previous_region = self.last_frames.get(player)
