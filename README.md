@@ -269,7 +269,6 @@ The text appears reliably when:
 ├── cleanup_mqtt.py         # MQTT cleanup script
 ├── diagnose_device.py      # Device codec diagnostic tool
 ├── performance_monitor.py   # CPU and performance metrics
-├── tuning_tools.py         # Detection region utilities (for future use)
 ├── detectors/
 │   ├── __init__.py
 │   ├── score_detector.py   # Score detection using OCR

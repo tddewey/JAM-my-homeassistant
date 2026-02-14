@@ -118,22 +118,6 @@ class ScoreDetector:
         
         return None
 
-    def detect_with_template_matching(self, region: np.ndarray) -> Optional[int]:
-        """Detect score using template matching (placeholder for future implementation).
-        
-        For now, this is a placeholder. Template matching would require
-        pre-captured digit templates. OCR is used as the primary method.
-        
-        Args:
-            region: Score region image
-            
-        Returns:
-            Detected score or None
-        """
-        # TODO: Implement template matching if digit templates are available
-        # This would involve matching against pre-captured digit images
-        return None
-
     def detect_score(self, frame: np.ndarray, player: str) -> Optional[int]:
         """Detect score for a specific player.
         
@@ -172,10 +156,6 @@ class ScoreDetector:
         
         # Try OCR detection
         score = self.detect_with_ocr(region)
-        
-        # If OCR fails, try template matching
-        if score is None:
-            score = self.detect_with_template_matching(region)
         
         # Validate score (reasonable range for arcade game)
         if score is not None and (score < 0 or score > 999):

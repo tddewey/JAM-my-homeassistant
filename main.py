@@ -74,9 +74,13 @@ class NBAJamDetector:
         """
         state_str = state.value
         state_color = {
-            GameState.TEAM_SELECTION: Fore.CYAN,
-            GameState.IN_PROGRESS: Fore.GREEN,
-            GameState.HALF_TIME: Fore.YELLOW,
+            GameState.NOT_PLAYING: "",  # Default/Gray
+            GameState.PLAYING: Fore.CYAN,  # Used for rest periods between quarters
+            GameState.Q1: Fore.GREEN,
+            GameState.Q2: Fore.GREEN,
+            GameState.Q3: Fore.GREEN,
+            GameState.Q4: Fore.GREEN,
+            GameState.HALFTIME: Fore.YELLOW,
             GameState.GAME_OVER: Fore.RED
         }.get(state, "")
         

@@ -176,7 +176,7 @@ class TextDetector:
             
         Returns:
             Detected heading text, or None if not detected.
-            Returns "PRESS SHOOT TO SELECT" for pre-game or "SUBSTITUTIONS" for halftime
+            Returns "PRESS SHOOT TO SELECT" for pre-game to trigger PLAYING state
         """
         if self.config.team_selection_heading_region is None:
             return None
@@ -193,21 +193,12 @@ class TextDetector:
         if not text:
             return None
         
-        # Check for known heading texts
+        # Check for pre-game heading text
         text_upper = text.upper()
         
         # Pre-game heading
         if 'PRESS' in text_upper and 'SHOOT' in text_upper and 'SELECT' in text_upper:
             return "PRESS SHOOT TO SELECT"
-        
-        # Halftime heading
-        if 'SUBSTITUTIONS' in text_upper or 'SUBSTITUTION' in text_upper:
-            return "SUBSTITUTIONS"
-        
-        # Return raw text if it looks like a heading but doesn't match exactly
-        # This allows for partial matches or variations
-        if len(text) > 5:  # Reasonable minimum length for a heading
-            return text
         
         return None
 
