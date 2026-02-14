@@ -1,0 +1,9 @@
+opencv-python>=4.8.0
+pytesseract>=0.3.10
+paho-mqtt>=1.6.1
+numpy>=1.24.0
+Pillow>=10.0.0
+pyyaml>=6.0
+colorama>=0.4.6
+psutil>=5.9.0
+

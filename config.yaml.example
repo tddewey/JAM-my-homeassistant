@@ -1,0 +1,71 @@
+# NBA Jam Video Detection Configuration
+
+video:
+  # Path to video capture device (typically /dev/video0 or /dev/video1)
+  device_path: /dev/video0
+  # Interval between frame captures in seconds (lower = more CPU usage)
+  frame_interval: 0.5
+  # Capture resolution (lower = faster processing, less CPU)
+  capture_width: 640    # Reduced from 1920 for better performance
+  capture_height: 480     # Reduced from 1080 for better performance
+  # Early grayscale conversion (reduces memory and processing)
+  use_grayscale: true
+
+detection:
+  # Screen regions for score detection (coordinates in pixels)
+  # Adjust these based on your capture resolution and screen layout
+  score_regions:
+    player1:
+      x: 1160      # Left edge of score region
+      y: 875       # Top edge of score region
+      width: 315   # Width of score region
+      height: 100  # Height of score region
+    player2:
+      x: 1160
+      y: 965
+      width: 315
+      height: 100
+  
+  # Region where quarter/period text appears (e.g., "1st quarter", "halftime", "final")
+  # This text appears when scores update, quarters begin, or quarters end
+  quarter_text_region:
+    x: 230        # Left edge of quarter text region
+    y: 1075        # Top edge of quarter text region
+    width: 620     # Width of quarter text region
+    height: 90     # Height of quarter text region
+  
+  # Region for team selection heading text
+  # Used to distinguish pre-game ("PRESS SHOOT TO SELECT") vs halftime ("SUBSTITUTIONS")
+  team_selection_heading_region:
+    x: 300        # Left edge of heading region
+    y: 30         # Top edge of heading region
+    width: 1020     # Width of heading region
+    height: 110     # Height of heading region
+  
+  # Motion detection threshold (0.0 to 1.0, lower = more sensitive)
+  motion_threshold: 0.1
+  
+  # Minimum confidence for score detection (0.0 to 1.0)
+  confidence_threshold: 0.7
+
+mqtt:
+  # Enable/disable MQTT publishing (set to true when ready)
+  enabled: false
+  
+  # MQTT broker settings
+  broker: localhost
+  port: 1883
+  username: null  # Set to null if no authentication
+  password: null  # Set to null if no authentication
+  
+  # Topic prefix for all MQTT topics
+  topic_prefix: nba_jam
+
+tuning:
+  # Enable CPU monitoring in console
+  monitor_cpu: false
+  # Enable visualization mode (shows detection regions)
+  visualize: false
+  # Interval between metrics display (seconds)
+  metrics_interval: 10
+
