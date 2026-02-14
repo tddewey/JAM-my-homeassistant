@@ -64,8 +64,6 @@ mqtt:
 tuning:
   # Enable CPU monitoring in console
   monitor_cpu: false
-  # Enable visualization mode (shows detection regions)
-  visualize: false
   # Interval between metrics display (seconds)
   metrics_interval: 10
 

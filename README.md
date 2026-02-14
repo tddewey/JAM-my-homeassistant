@@ -12,7 +12,6 @@ This system captures video from an NBA Jam arcade cabinet via HDMI capture card,
 - **Console Logging**: Verbose logging for testing and validation
 - **Performance Optimizations**: Reduced resolution, grayscale conversion, optimized processing
 - **CPU Monitoring**: Real-time CPU and performance metrics
-- **Visualization Mode**: Visual overlay showing detection regions and metrics
 - **Codec Detection**: Identify capture device codec (MJPEG, YUYV, H.264, etc.)
 - **Cleanup Script**: Remove MQTT entities after use
 
@@ -110,7 +109,7 @@ cp config.yaml.example config.yaml
    - MQTT broker settings (if enabled)
    - Performance tuning settings
 
-   **Note:** Detection regions may vary depending on your video shaders and RetroArch configurations. Use visualization mode (`--visualize`) to calibrate these regions.
+   **Note:** Detection regions may vary depending on your video shaders and RetroArch configurations. Adjust the coordinates in the config file based on your setup.
 
 
 
@@ -171,12 +170,6 @@ python main.py
 # With CPU monitoring
 python main.py --monitor-cpu
 
-# Visualization mode (shows detection regions)
-python main.py --visualize
-
-# Combined modes
-python main.py --monitor-cpu --visualize
-
 # Custom metrics interval
 python main.py --monitor-cpu --metrics-interval 5
 ```
@@ -187,7 +180,6 @@ The script will:
 - Log all detections to console (verbose by default)
 - Display codec information at startup
 - Show performance metrics periodically (if enabled)
-- Display visualization window (if enabled, press 'q' to quit)
 - Optionally publish to MQTT if enabled in config
 
 ### Cleanup Script
@@ -219,10 +211,6 @@ This publishes empty config messages to remove all NBA Jam entities from Home As
 4. **Monitor CPU**: Use `--monitor-cpu` flag to see performance
    - Aim for <80% CPU usage
    - Adjust `frame_interval` based on CPU load
-
-5. **Use visualization**: Run with `--visualize` to see detection regions
-   - Helps calibrate score region coordinates
-   - Shows real-time FPS and CPU usage
 
 ## Text-Based State Detection
 
@@ -264,11 +252,10 @@ The text appears reliably when:
 1. **Diagnose device**: Run `diagnose_device.py` to check codec
 2. **Configure text regions**: Set up `quarter_text_region` and `team_selection_heading_region` in config
 3. **Start with MQTT disabled**: Set `mqtt.enabled: false` in config
-4. **Use visualization mode**: Run `source venv/bin/activate && python main.py --visualize` to calibrate regions
-5. **Monitor performance**: Use `--monitor-cpu` to tune frame_interval
-6. **Validate detection**: Watch console output to verify accuracy
-7. **Adjust regions**: Fine-tune score region coordinates in config
-8. **Enable MQTT**: Once validated, set `mqtt.enabled: true`
+4. **Monitor performance**: Use `--monitor-cpu` to tune frame_interval
+5. **Validate detection**: Watch console output to verify accuracy
+6. **Adjust regions**: Fine-tune score region coordinates in config based on console output
+7. **Enable MQTT**: Once validated, set `mqtt.enabled: true`
 9. **Cleanup**: Use cleanup script to remove entities when done
 
 ## Project Structure
@@ -282,7 +269,7 @@ The text appears reliably when:
 ├── cleanup_mqtt.py         # MQTT cleanup script
 ├── diagnose_device.py      # Device codec diagnostic tool
 ├── performance_monitor.py   # CPU and performance metrics
-├── tuning_tools.py         # Visualization utilities
+├── tuning_tools.py         # Detection region utilities (for future use)
 ├── detectors/
 │   ├── __init__.py
 │   ├── score_detector.py   # Score detection using OCR

@@ -15,7 +15,6 @@ from detectors.score_detector import ScoreDetector
 from detectors.state_detector import StateDetector, GameState
 from mqtt_client import MQTTClient
 from performance_monitor import PerformanceMonitor
-from tuning_tools import create_visualization_frame
 
 # Initialize colorama for colored console output
 init(autoreset=True)
@@ -25,13 +24,12 @@ class NBAJamDetector:
     """Main detector class that orchestrates all components."""
 
     def __init__(self, config: Config, monitor_cpu: bool = False, 
-                 visualize: bool = False, metrics_interval: int = 10):
+                 metrics_interval: int = 10):
         """Initialize detector.
         
         Args:
             config: Configuration object
             monitor_cpu: Override config to enable CPU monitoring
-            visualize: Override config to enable visualization
             metrics_interval: Override config for metrics interval
         """
         self.config = config
@@ -39,7 +37,6 @@ class NBAJamDetector:
         
         # Override config with CLI args if provided
         self.monitor_cpu = monitor_cpu or config.tuning.monitor_cpu
-        self.visualize = visualize or config.tuning.visualize
         self.metrics_interval = metrics_interval or config.tuning.metrics_interval
         
         # Initialize components
@@ -168,9 +165,6 @@ class NBAJamDetector:
         if self.monitor_cpu:
             self.log("CPU monitoring enabled", Fore.GREEN)
         
-        if self.visualize:
-            self.log("Visualization mode enabled (press 'q' to quit)", Fore.GREEN)
-        
         self.log("Detection started. Press Ctrl+C to stop.", Fore.GREEN)
         self.log("=" * 60)
         
@@ -230,28 +224,6 @@ class NBAJamDetector:
                         if cpu > 80:
                             self.log(f"WARNING: High CPU usage ({cpu:.1f}%)", Fore.RED)
                 
-                # Visualization mode
-                if self.visualize:
-                    fps = self.performance_monitor.get_fps() if self.performance_monitor else 0.0
-                    cpu = self.performance_monitor.get_cpu_percent() if self.performance_monitor else 0.0
-                    
-                    vis_frame = create_visualization_frame(
-                        frame,
-                        self.config.detection,
-                        scores,
-                        state,
-                        fps,
-                        cpu,
-                        self.video_capture.codec_info
-                    )
-                    
-                    cv2.imshow('NBA Jam Detection', vis_frame)
-                    
-                    # Check for 'q' key to quit
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        self.log("Quit key pressed", Fore.YELLOW)
-                        break
-                
                 # Small delay to prevent excessive CPU usage
                 time.sleep(0.01)
                 
@@ -269,8 +241,6 @@ class NBAJamDetector:
         self.running = False
         self.video_capture.release()
         self.mqtt_client.disconnect()
-        if self.visualize:
-            cv2.destroyAllWindows()
         if self.performance_monitor:
             self.log("\n" + self.performance_monitor.get_metrics_summary(), Fore.CYAN)
         self.log("Cleanup complete", Fore.CYAN)
@@ -299,8 +269,6 @@ def main():
 Examples:
   python main.py                          # Normal mode
   python main.py --monitor-cpu            # With CPU monitoring
-  python main.py --visualize              # Visualization mode
-  python main.py --monitor-cpu --visualize # Both modes
   python main.py --metrics-interval 5     # Custom metrics interval
         """
     )
@@ -308,11 +276,6 @@ Examples:
         '--monitor-cpu',
         action='store_true',
         help='Enable CPU and performance monitoring'
-    )
-    parser.add_argument(
-        '--visualize',
-        action='store_true',
-        help='Enable visualization mode (shows detection regions)'
     )
     parser.add_argument(
         '--metrics-interval',
@@ -339,7 +302,6 @@ Examples:
     detector = NBAJamDetector(
         config,
         monitor_cpu=args.monitor_cpu,
-        visualize=args.visualize,
         metrics_interval=args.metrics_interval
     )
     detector.run()

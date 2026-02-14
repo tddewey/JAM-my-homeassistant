@@ -59,7 +59,6 @@ class MQTTConfig:
 class TuningConfig:
     """Tuning and monitoring configuration."""
     monitor_cpu: bool
-    visualize: bool
     metrics_interval: int
 
 
@@ -156,7 +155,6 @@ class Config:
         tuning_data = data.get('tuning', {})
         tuning_config = TuningConfig(
             monitor_cpu=tuning_data.get('monitor_cpu', False),
-            visualize=tuning_data.get('visualize', False),
             metrics_interval=tuning_data.get('metrics_interval', 10)
         )
 
