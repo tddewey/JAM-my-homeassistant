@@ -5,7 +5,7 @@ import numpy as np
 import pytesseract
 from typing import Optional, Dict, Tuple, List
 from collections import deque, Counter
-from config import DetectionConfig, ScoreRegion
+from config import DetectionConfig, ScoreRegion, TextRegion
 
 
 class ScoreDetector:
@@ -71,6 +71,46 @@ class ScoreDetector:
             roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         
         return roi
+
+    def has_purple_band(self, frame: np.ndarray) -> bool:
+        """Check if purple band is present in quarter text region.
+        
+        Args:
+            frame: Full video frame (must be color/BGR, not grayscale)
+            
+        Returns:
+            True if purple band detected, False otherwise
+        """
+        # Reuse quarter text region for purple detection
+        if self.config.quarter_text_region is None:
+            return False
+        
+        # Extract region from color frame (don't convert to grayscale)
+        h, w = frame.shape[:2]
+        region = self.config.quarter_text_region
+        x1 = max(0, region.x)
+        y1 = max(0, region.y)
+        x2 = min(w, region.x + region.width)
+        y2 = min(h, region.y + region.height)
+        
+        if x2 <= x1 or y2 <= y1:
+            return False
+        
+        roi = frame[y1:y2, x1:x2]
+        if roi.size == 0 or len(roi.shape) != 3:
+            return False
+        
+        # Purple in BGR: B and R are high, G is low
+        # Typical purple: B=100-220, G=0-80, R=100-220
+        # Check if significant portion of region is purple
+        purple_mask = (
+            (roi[:, :, 0] >= 100) & (roi[:, :, 0] <= 220) &  # B channel
+            (roi[:, :, 1] >= 0) & (roi[:, :, 1] <= 80) &     # G channel (low)
+            (roi[:, :, 2] >= 100) & (roi[:, :, 2] <= 220)    # R channel
+        )
+        
+        purple_ratio = np.sum(purple_mask) / roi.size
+        return purple_ratio > 0.1  # At least 10% of region is purple
 
     def detect_motion(self, current: Optional[np.ndarray], previous: Optional[np.ndarray], 
                      threshold: float) -> bool:
@@ -328,15 +368,32 @@ class ScoreDetector:
         # Return last valid score if current detection failed
         return self.last_valid_scores[player]
 
-    def detect_scores(self, frame: np.ndarray) -> Dict[str, Optional[int]]:
+    def detect_scores(self, frame: np.ndarray, color_frame: Optional[np.ndarray] = None) -> Dict[str, Optional[int]]:
         """Detect scores for both players.
         
         Args:
-            frame: Full video frame
+            frame: Video frame (grayscale or color) for OCR
+            color_frame: Color/BGR frame for purple detection (if None, uses frame)
             
         Returns:
             Dictionary with 'player1' and 'player2' scores (None if not detected)
         """
+        # Early bail: Check for purple band before any expensive operations
+        # Use color_frame if provided, otherwise try frame (might be color)
+        check_frame = color_frame if color_frame is not None else frame
+        
+        # Only proceed if we have a color frame and purple is detected
+        if check_frame is not None and len(check_frame.shape) == 3:
+            if not self.has_purple_band(check_frame):
+                if self.debug:
+                    print("  No purple band detected, skipping OCR, returning last valid scores")
+                # Return last valid scores immediately - no OCR needed
+                return {
+                    'player1': self.last_valid_scores['player1'],
+                    'player2': self.last_valid_scores['player2']
+                }
+        
+        # Purple detected (or no color frame available) - proceed with detection
         return {
             'player1': self.detect_score(frame, 'player1'),
             'player2': self.detect_score(frame, 'player2')

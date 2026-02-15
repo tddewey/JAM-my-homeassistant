@@ -217,8 +217,8 @@ class NBAJamDetector:
                 # Detect game state
                 state = self.state_detector.detect_state(state_frame)
                 
-                # Detect scores - score detector handles both grayscale and color
-                scores = self.score_detector.detect_scores(score_frame)
+                # Detect scores - pass color frame for purple detection, grayscale for OCR
+                scores = self.score_detector.detect_scores(score_frame, color_frame=state_frame)
                 
                 # Check for state change
                 state_changed = state != self.last_state
