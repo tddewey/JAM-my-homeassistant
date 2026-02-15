@@ -43,14 +43,14 @@ class StateDetector:
         Returns:
             Detected game state
         """
-        # Try to detect team selection heading first
-        heading_text = self.text_detector.detect_team_selection_heading(frame)
-        
-        if heading_text == "PRESS SHOOT TO SELECT":
-            # Pre-game team selection - trigger PLAYING state
-            self.current_state = GameState.PLAYING
-            self.quarter_history.clear()  # Clear history on state change
-            return self.current_state
+        # TEMPORARILY DISABLED: Try to detect team selection heading first
+        # heading_text = self.text_detector.detect_team_selection_heading(frame)
+        # 
+        # if heading_text == "PRESS SHOOT TO SELECT":
+        #     # Pre-game team selection - trigger PLAYING state
+        #     self.current_state = GameState.PLAYING
+        #     self.quarter_history.clear()  # Clear history on state change
+        #     return self.current_state
         
         # Try to detect quarter/period text
         quarter_info = self.text_detector.detect_quarter_text(frame)

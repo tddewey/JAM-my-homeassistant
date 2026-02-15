@@ -289,6 +289,8 @@ class ScoreDetector:
         
         # Check if region extraction failed
         if region is None:
+            if self.debug:
+                print(f"  {player}: Region extraction failed, returning last valid={self.last_valid_scores[player]}")
             # Return last valid score if available
             return self.last_valid_scores[player]
         
@@ -300,18 +302,23 @@ class ScoreDetector:
             self.config.motion_threshold
         )
         
+        if self.debug:
+            print(f"  {player}: Motion detected={has_motion}, previous_region={'exists' if previous_region is not None else 'None'}")
+        
         # Store current frame for next comparison
         self.last_frames[player] = region.copy()
         
         # Only process if motion detected or first frame
         if not has_motion and previous_region is not None:
             # No motion, return last valid score
+            if self.debug:
+                print(f"  {player}: No motion, returning last valid={self.last_valid_scores[player]}")
             return self.last_valid_scores[player]
         
         # Try OCR detection with multiple strategies
         score, raw_text = self.detect_with_ocr(region)
         
-        if self.debug and raw_text:
+        if self.debug:
             print(f"  {player}: OCR raw='{raw_text}', detected={score}")
         
         # Validate score range (0-999)
@@ -323,9 +330,14 @@ class ScoreDetector:
         # Add to history for consensus
         if score is not None:
             self.score_history[player].append(score)
+            if self.debug:
+                print(f"  {player}: Added to history, history={list(self.score_history[player])}")
         
         # Get consensus score from recent history
         consensus_score = self.get_consensus_score(player)
+        
+        if self.debug:
+            print(f"  {player}: Consensus score={consensus_score}, current score={score}")
         
         # Use consensus if available, otherwise use current detection
         final_score = consensus_score if consensus_score is not None else score
@@ -341,6 +353,8 @@ class ScoreDetector:
                 return validated_score
             elif self.debug:
                 print(f"  {player}: Score {final_score} rejected ({reason}), keeping {self.last_valid_scores[player]}")
+        elif self.debug:
+            print(f"  {player}: No final score to validate, returning last valid={self.last_valid_scores[player]}")
         
         # Return last valid score if current detection failed
         return self.last_valid_scores[player]

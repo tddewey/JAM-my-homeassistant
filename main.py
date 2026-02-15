@@ -195,12 +195,14 @@ class NBAJamDetector:
                 frame_result = self.video_capture.read_frame()
                 
                 if frame_result is None:
+                    self.log("Frame read: None (no frame available)", Fore.YELLOW)
                     time.sleep(0.1)
                     continue
                 
                 frame, timestamp = frame_result
                 # Track when frame was read for interval enforcement
                 frame_read_time = timestamp
+                self.log(f"Frame read: timestamp={timestamp:.3f}", Fore.CYAN)
                 
                 # Use grayscale frame if available and configured
                 if self.config.video.use_grayscale:
@@ -218,6 +220,14 @@ class NBAJamDetector:
                 # Detect scores - score detector handles both grayscale and color
                 scores = self.score_detector.detect_scores(score_frame)
                 
+                # TEMPORARILY: Save screenshot on every detection for debugging
+                if self.screenshot_manager:
+                    screenshot_path = self.screenshot_manager.capture_screenshot(
+                        frame, state, scores, self.config.detection
+                    )
+                    if screenshot_path:
+                        self.log(f"Screenshot saved (every detection): {screenshot_path}", Fore.CYAN)
+                
                 # Check for state change
                 state_changed = state != self.last_state
                 
@@ -230,21 +240,12 @@ class NBAJamDetector:
                     p2_score is not None and p2_score != self.last_saved_scores.get('player2')
                 )
                 
-                # Capture screenshot on state change or score change
-                if self.screenshot_manager and (state_changed or score_changed):
-                    screenshot_path = self.screenshot_manager.capture_screenshot(
-                        frame, state, scores, self.config.detection
-                    )
-                    if screenshot_path:
-                        change_type = "state change" if state_changed else "score change"
-                        self.log(f"Screenshot saved ({change_type}): {screenshot_path}", Fore.CYAN)
-                    
-                    # Update tracking
-                    if state_changed:
-                        self.last_state = state
-                    if score_changed:
-                        self.last_saved_scores['player1'] = p1_score
-                        self.last_saved_scores['player2'] = p2_score
+                # Update tracking (keep this for state/score change tracking)
+                if state_changed:
+                    self.last_state = state
+                if score_changed:
+                    self.last_saved_scores['player1'] = p1_score
+                    self.last_saved_scores['player2'] = p2_score
                 elif self.last_state is None:
                     # Initialize last_state and last_saved_scores on first frame
                     self.last_state = state
