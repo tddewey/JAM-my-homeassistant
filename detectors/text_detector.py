@@ -18,6 +18,45 @@ class TextDetector:
         """
         self.config = config
 
+    def has_purple_band(self, frame: np.ndarray) -> bool:
+        """Check if purple band is present in quarter text region.
+        
+        Args:
+            frame: Full video frame (must be color/BGR, not grayscale)
+            
+        Returns:
+            True if purple band detected, False otherwise
+        """
+        if self.config.quarter_text_region is None:
+            return False
+        
+        # Extract region from color frame (don't convert to grayscale)
+        h, w = frame.shape[:2]
+        region = self.config.quarter_text_region
+        x1 = max(0, region.x)
+        y1 = max(0, region.y)
+        x2 = min(w, region.x + region.width)
+        y2 = min(h, region.y + region.height)
+        
+        if x2 <= x1 or y2 <= y1:
+            return False
+        
+        roi = frame[y1:y2, x1:x2]
+        if roi.size == 0 or len(roi.shape) != 3:
+            return False
+        
+        # Purple in BGR: B and R are high, G is low
+        # Typical purple: B=100-220, G=0-80, R=100-220
+        # Check if significant portion of region is purple
+        purple_mask = (
+            (roi[:, :, 0] >= 100) & (roi[:, :, 0] <= 220) &  # B channel
+            (roi[:, :, 1] >= 0) & (roi[:, :, 1] <= 80) &     # G channel (low)
+            (roi[:, :, 2] >= 100) & (roi[:, :, 2] <= 220)    # R channel
+        )
+        
+        purple_ratio = np.sum(purple_mask) / roi.size
+        return purple_ratio > 0.1  # At least 10% of region is purple
+
     def extract_region(self, frame: np.ndarray, region: TextRegion) -> Optional[np.ndarray]:
         """Extract text region from frame.
         
@@ -128,7 +167,7 @@ class TextDetector:
         """Detect quarter/period text from frame with multiple OCR strategies.
         
         Args:
-            frame: Full video frame
+            frame: Full video frame (must be color/BGR for purple detection)
             
         Returns:
             Dictionary with detected quarter info, or None if not detected.
@@ -138,7 +177,11 @@ class TextDetector:
         if self.config.quarter_text_region is None:
             return None
         
-        # Extract region
+        # Check for purple band first - only run OCR if overlay is present
+        if not self.has_purple_band(frame):
+            return None
+        
+        # Extract region (convert to grayscale for OCR)
         region = self.extract_region(frame, self.config.quarter_text_region)
         
         # Check if region extraction failed

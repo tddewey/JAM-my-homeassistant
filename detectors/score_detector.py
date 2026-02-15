@@ -281,28 +281,10 @@ class ScoreDetector:
             # Return last valid score if available
             return self.last_valid_scores[player]
         
-        # Check for motion
-        previous_region = self.last_frames.get(player)
-        has_motion = self.detect_motion(
-            region,
-            previous_region,
-            self.config.motion_threshold
-        )
+        # REMOVED: Motion detection - always process for speed
+        # Motion detection was mostly always true and added overhead
         
-        if self.debug:
-            print(f"  {player}: Motion detected={has_motion}, previous_region={'exists' if previous_region is not None else 'None'}")
-        
-        # Store current frame for next comparison
-        self.last_frames[player] = region.copy()
-        
-        # Only process if motion detected or first frame
-        if not has_motion and previous_region is not None:
-            # No motion, return last valid score
-            if self.debug:
-                print(f"  {player}: No motion, returning last valid={self.last_valid_scores[player]}")
-            return self.last_valid_scores[player]
-        
-        # Try OCR detection with multiple strategies
+        # Try OCR detection
         score, raw_text = self.detect_with_ocr(region)
         
         if self.debug:

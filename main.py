@@ -233,9 +233,16 @@ class NBAJamDetector:
                 )
                 
                 # Capture screenshot on state change or score change
+                # Use the exact frame that OCR was run on (convert grayscale back to color if needed)
                 if self.screenshot_manager and (state_changed or score_changed):
+                    # If score_frame is grayscale, convert back to BGR for screenshot
+                    if len(score_frame.shape) == 2:
+                        screenshot_frame = cv2.cvtColor(score_frame, cv2.COLOR_GRAY2BGR)
+                    else:
+                        screenshot_frame = score_frame.copy()
+                    
                     screenshot_path = self.screenshot_manager.capture_screenshot(
-                        frame, state, scores, self.config.detection
+                        screenshot_frame, state, scores, self.config.detection
                     )
                     if screenshot_path:
                         change_type = "state change" if state_changed else "score change"
