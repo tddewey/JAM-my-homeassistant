@@ -27,7 +27,8 @@ class NBAJamDetector:
     """Main detector class that orchestrates all components."""
 
     def __init__(self, config: Config, monitor_cpu: bool = False, 
-                 metrics_interval: int = 10, save_screenshots: bool = False):
+                 metrics_interval: int = 10, save_screenshots: bool = False,
+                 debug: bool = False):
         """Initialize detector.
         
         Args:
@@ -35,6 +36,7 @@ class NBAJamDetector:
             monitor_cpu: Override config to enable CPU monitoring
             metrics_interval: Override config for metrics interval
             save_screenshots: Override config to enable screenshot capture
+            debug: Enable debug logging for score detection
         """
         self.config = config
         self.running = False
@@ -46,7 +48,7 @@ class NBAJamDetector:
         
         # Initialize components
         self.video_capture = VideoCapture(config.video)
-        self.score_detector = ScoreDetector(config.detection)
+        self.score_detector = ScoreDetector(config.detection, debug=debug)
         self.state_detector = StateDetector(config.detection)
         self.mqtt_client = MQTTClient(config.mqtt)
         self.performance_monitor = PerformanceMonitor() if self.monitor_cpu else None
@@ -326,6 +328,7 @@ Examples:
   python main.py                          # Normal mode
   python main.py --monitor-cpu            # With CPU monitoring
   python main.py --save-screenshots       # Enable screenshot capture
+  python main.py --debug                  # Enable debug logging for score detection
   python main.py --monitor-cpu --metrics-interval 5     # Custom metrics interval
         """
     )
@@ -344,6 +347,11 @@ Examples:
         '--save-screenshots',
         action='store_true',
         help='Enable screenshot capture on state changes (overrides config)'
+    )
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug logging for score detection (shows OCR results and validation)'
     )
     parser.add_argument(
         '--pid-file',
@@ -392,7 +400,8 @@ Examples:
         config,
         monitor_cpu=args.monitor_cpu,
         metrics_interval=args.metrics_interval,
-        save_screenshots=args.save_screenshots
+        save_screenshots=args.save_screenshots,
+        debug=args.debug
     )
     
     try:
