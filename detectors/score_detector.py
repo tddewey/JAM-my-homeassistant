@@ -141,7 +141,7 @@ class ScoreDetector:
         return binary
 
     def detect_with_ocr(self, region: np.ndarray) -> Tuple[Optional[int], Optional[str]]:
-        """Detect score using OCR with multiple preprocessing strategies.
+        """Detect score using OCR with fastest preprocessing strategy.
         
         Args:
             region: Score region image (grayscale)
@@ -152,59 +152,46 @@ class ScoreDetector:
         if region is None or region.size == 0:
             return None, None
         
-        # Try multiple preprocessing strategies and take consensus
-        scores_found = []
-        raw_texts = []
+        # Use fastest strategy (0: OTSU threshold) for speed
+        binary = self.preprocess_for_ocr(region, strategy=0)
+        if binary is None:
+            return None, None
         
-        for strategy in range(3):
-            binary = self.preprocess_for_ocr(region, strategy)
-            if binary is None:
-                continue
+        # OCR with digit-only whitelist
+        try:
+            text = pytesseract.image_to_string(
+                binary,
+                config='--psm 7 -c tessedit_char_whitelist=0123456789'
+            ).strip()
             
-            # OCR with digit-only whitelist
-            try:
-                text = pytesseract.image_to_string(
-                    binary,
-                    config='--psm 7 -c tessedit_char_whitelist=0123456789'
-                ).strip()
-                
-                raw_texts.append(text)
-                
-                if text:
-                    # Try to parse full number
-                    try:
-                        score = int(text)
-                        if 0 <= score <= 999:
-                            scores_found.append(score)
-                    except ValueError:
-                        # Try first sequence of digits
-                        digits = ''.join(c for c in text if c.isdigit())
-                        if digits:
-                            try:
-                                score = int(digits)
-                                if 0 <= score <= 999:
-                                    scores_found.append(score)
-                            except ValueError:
-                                pass
-            except Exception:
-                pass
-        
-        # Take most common score if multiple strategies agree
-        if scores_found:
-            # Count occurrences
-            score_counts = Counter(scores_found)
-            most_common = score_counts.most_common(1)[0]
+            if text:
+                # Try to parse full number
+                try:
+                    score = int(text)
+                    if 0 <= score <= 999:
+                        if self.debug:
+                            print(f"  OCR: detected={score}, raw_text='{text}'")
+                        return score, text
+                except ValueError:
+                    # Try first sequence of digits
+                    digits = ''.join(c for c in text if c.isdigit())
+                    if digits:
+                        try:
+                            score = int(digits)
+                            if 0 <= score <= 999:
+                                if self.debug:
+                                    print(f"  OCR: detected={score}, raw_text='{text}'")
+                                return score, text
+                        except ValueError:
+                            pass
             
-            # Require at least 2 strategies to agree (consensus)
-            if most_common[1] >= 2:
-                raw_text = raw_texts[0] if raw_texts else None
-                if self.debug:
-                    print(f"  OCR: strategies={len(scores_found)}, consensus={most_common[0]} (count={most_common[1]}), raw_texts={raw_texts}")
-                return most_common[0], raw_text
-            elif self.debug:
-                print(f"  OCR: no consensus, scores={scores_found}, raw_texts={raw_texts}")
-        
-        return None, (raw_texts[0] if raw_texts else None)
+            if self.debug:
+                print(f"  OCR: no valid score found, raw_text='{text}'")
+            return None, text
+        except Exception as e:
+            if self.debug:
+                print(f"  OCR: exception={e}")
+            return None, None
 
     def validate_score_temporal(self, score: Optional[int], player: str) -> Tuple[Optional[int], str]:
         """Validate score using temporal consistency checks.

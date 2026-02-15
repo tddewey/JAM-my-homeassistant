@@ -145,20 +145,13 @@ class TextDetector:
         if region is None:
             return None
         
-        # Try multiple preprocessing strategies and take best result
-        texts_found = []
-        for strategy in range(3):
-            binary = self.preprocess_for_ocr(region, strategy)
-            if binary is None:
-                continue
-            
-            # Detect text
-            text = self.detect_text(binary)
-            if text:
-                texts_found.append(text)
+        # Use fastest strategy (0: adaptive threshold) for speed
+        binary = self.preprocess_for_ocr(region, strategy=0)
+        if binary is None:
+            return None
         
-        # Use first non-empty text found, or None if all failed
-        text = texts_found[0] if texts_found else None
+        # Detect text
+        text = self.detect_text(binary)
         
         if not text:
             return None
