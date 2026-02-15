@@ -59,6 +59,8 @@ class NBAJamDetector:
         
         # Track last state for screenshot capture
         self.last_state = None
+        # Track last saved scores for screenshot capture on score changes
+        self.last_saved_scores = {'player1': None, 'player2': None}
 
     def log(self, message: str, color: str = ""):
         """Log message with timestamp.
@@ -195,6 +197,8 @@ class NBAJamDetector:
                     continue
                 
                 frame, timestamp = frame_result
+                # Track when frame was read for interval enforcement
+                frame_read_time = timestamp
                 
                 # Use grayscale frame if available and configured
                 if self.config.video.use_grayscale:
@@ -212,17 +216,38 @@ class NBAJamDetector:
                 # Detect scores - score detector handles both grayscale and color
                 scores = self.score_detector.detect_scores(score_frame)
                 
-                # Capture screenshot on state change
-                if self.screenshot_manager and state != self.last_state:
+                # Check for state change
+                state_changed = state != self.last_state
+                
+                # Check for score changes
+                p1_score = scores.get('player1')
+                p2_score = scores.get('player2')
+                score_changed = (
+                    p1_score is not None and p1_score != self.last_saved_scores.get('player1')
+                ) or (
+                    p2_score is not None and p2_score != self.last_saved_scores.get('player2')
+                )
+                
+                # Capture screenshot on state change or score change
+                if self.screenshot_manager and (state_changed or score_changed):
                     screenshot_path = self.screenshot_manager.capture_screenshot(
                         frame, state, scores, self.config.detection
                     )
                     if screenshot_path:
-                        self.log(f"Screenshot saved: {screenshot_path}", Fore.CYAN)
-                    self.last_state = state
+                        change_type = "state change" if state_changed else "score change"
+                        self.log(f"Screenshot saved ({change_type}): {screenshot_path}", Fore.CYAN)
+                    
+                    # Update tracking
+                    if state_changed:
+                        self.last_state = state
+                    if score_changed:
+                        self.last_saved_scores['player1'] = p1_score
+                        self.last_saved_scores['player2'] = p2_score
                 elif self.last_state is None:
-                    # Initialize last_state on first frame
+                    # Initialize last_state and last_saved_scores on first frame
                     self.last_state = state
+                    self.last_saved_scores['player1'] = p1_score
+                    self.last_saved_scores['player2'] = p2_score
                 
                 # Calculate processing time
                 processing_time = time.time() - frame_start
@@ -249,8 +274,12 @@ class NBAJamDetector:
                         if cpu > 80:
                             self.log(f"WARNING: High CPU usage ({cpu:.1f}%)", Fore.RED)
                 
-                # Small delay to prevent excessive CPU usage
-                time.sleep(0.01)
+                # Enforce frame interval: sleep if we processed faster than configured interval
+                elapsed_since_frame = time.time() - frame_read_time
+                remaining_time = self.config.video.frame_interval - elapsed_since_frame
+                if remaining_time > 0:
+                    time.sleep(remaining_time)
+                # If processing took longer than frame_interval, continue immediately
                 
         except KeyboardInterrupt:
             self.log("\nShutting down...", Fore.YELLOW)

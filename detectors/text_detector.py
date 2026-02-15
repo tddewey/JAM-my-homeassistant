@@ -54,11 +54,12 @@ class TextDetector:
         
         return roi
 
-    def preprocess_for_ocr(self, region: np.ndarray) -> Optional[np.ndarray]:
-        """Preprocess image region for better OCR.
+    def preprocess_for_ocr(self, region: np.ndarray, strategy: int = 0) -> Optional[np.ndarray]:
+        """Preprocess image region for better OCR with multiple strategies.
         
         Args:
             region: Grayscale image region
+            strategy: Preprocessing strategy (0=adaptive, 1=OTSU, 2=aggressive)
             
         Returns:
             Preprocessed binary image, or None if region is invalid
@@ -72,11 +73,22 @@ class TextDetector:
         if h < 20 or w < 40:
             region = cv2.resize(region, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
         
-        # Apply adaptive thresholding for better text extraction
-        # This works better than simple threshold for varying backgrounds
-        binary = cv2.adaptiveThreshold(
-            region, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-        )
+        if strategy == 0:
+            # Adaptive thresholding (default)
+            binary = cv2.adaptiveThreshold(
+                region, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            )
+        elif strategy == 1:
+            # OTSU threshold
+            _, binary = cv2.threshold(region, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        else:  # strategy == 2
+            # Aggressive: Gaussian blur + OTSU + morphological operations
+            blurred = cv2.GaussianBlur(region, (3, 3), 0)
+            _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            # Remove small noise
+            kernel = np.ones((2, 2), np.uint8)
+            binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+            binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
         
         # Invert if needed (white text on dark background)
         if np.mean(binary) > 127:
@@ -113,7 +125,7 @@ class TextDetector:
             return ""
 
     def detect_quarter_text(self, frame: np.ndarray) -> Optional[Dict[str, str]]:
-        """Detect quarter/period text from frame.
+        """Detect quarter/period text from frame with multiple OCR strategies.
         
         Args:
             frame: Full video frame
@@ -133,15 +145,20 @@ class TextDetector:
         if region is None:
             return None
         
-        # Preprocess for OCR
-        binary = self.preprocess_for_ocr(region)
+        # Try multiple preprocessing strategies and take best result
+        texts_found = []
+        for strategy in range(3):
+            binary = self.preprocess_for_ocr(region, strategy)
+            if binary is None:
+                continue
+            
+            # Detect text
+            text = self.detect_text(binary)
+            if text:
+                texts_found.append(text)
         
-        # Check if preprocessing failed
-        if binary is None:
-            return None
-        
-        # Detect text
-        text = self.detect_text(binary)
+        # Use first non-empty text found, or None if all failed
+        text = texts_found[0] if texts_found else None
         
         if not text:
             return None
@@ -179,18 +196,30 @@ class TextDetector:
                 result['quarter'] = 4
             return result
         
-        # Check for quarter indicators
+        # Check for quarter indicators - exact format "XND QUARTER", "XST QUARTER", etc.
         if 'quarter' in text_lower:
             result['state'] = 'quarter'
-            # Extract quarter number
-            if 'first' in text_lower or '1st' in text_lower or '1' in text:
+            # Look for exact patterns: "1ST QUARTER", "2ND QUARTER", "3RD QUARTER", "4TH QUARTER"
+            # Also handle variations like "1ST", "2ND", etc. before "QUARTER"
+            text_upper = text.upper()
+            if '1ST' in text_upper or ('1' in text and 'ST' in text_upper):
                 result['quarter'] = 1
-            elif 'second' in text_lower or '2nd' in text_lower or '2' in text:
+            elif '2ND' in text_upper or ('2' in text and 'ND' in text_upper):
                 result['quarter'] = 2
-            elif 'third' in text_lower or '3rd' in text_lower or '3' in text:
+            elif '3RD' in text_upper or ('3' in text and 'RD' in text_upper):
                 result['quarter'] = 3
-            elif 'fourth' in text_lower or '4th' in text_lower or '4' in text:
+            elif '4TH' in text_upper or ('4' in text and 'TH' in text_upper):
                 result['quarter'] = 4
+            # Fallback to simple number matching if exact pattern not found
+            elif result['quarter'] is None:
+                if 'first' in text_lower or '1' in text:
+                    result['quarter'] = 1
+                elif 'second' in text_lower or '2' in text:
+                    result['quarter'] = 2
+                elif 'third' in text_lower or '3' in text:
+                    result['quarter'] = 3
+                elif 'fourth' in text_lower or '4' in text:
+                    result['quarter'] = 4
             return result
         
         # If we got text but couldn't parse it, return None
@@ -216,15 +245,20 @@ class TextDetector:
         if region is None:
             return None
         
-        # Preprocess for OCR
-        binary = self.preprocess_for_ocr(region)
+        # Try multiple preprocessing strategies for better detection
+        texts_found = []
+        for strategy in range(3):
+            binary = self.preprocess_for_ocr(region, strategy)
+            if binary is None:
+                continue
+            
+            # Detect text
+            text = self.detect_text(binary)
+            if text:
+                texts_found.append(text)
         
-        # Check if preprocessing failed
-        if binary is None:
-            return None
-        
-        # Detect text
-        text = self.detect_text(binary)
+        # Use first non-empty text found
+        text = texts_found[0] if texts_found else None
         
         if not text:
             return None

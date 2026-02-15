@@ -3,22 +3,35 @@
 import cv2
 import numpy as np
 import pytesseract
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, List
+from collections import deque, Counter
 from config import DetectionConfig, ScoreRegion
 
 
 class ScoreDetector:
     """Detects scores from video frames using template matching and OCR."""
 
-    def __init__(self, config: DetectionConfig):
+    def __init__(self, config: DetectionConfig, debug: bool = False):
         """Initialize score detector.
         
         Args:
             config: Detection configuration
+            debug: Enable debug logging
         """
         self.config = config
+        self.debug = debug
         self.last_frames: Dict[str, np.ndarray] = {}
         self.last_scores: Dict[str, Optional[int]] = {
+            'player1': None,
+            'player2': None
+        }
+        # Multi-frame consensus: track recent detections
+        self.score_history: Dict[str, deque] = {
+            'player1': deque(maxlen=3),  # Require 2-3 consistent detections
+            'player2': deque(maxlen=3)
+        }
+        # Track last valid scores for temporal validation
+        self.last_valid_scores: Dict[str, Optional[int]] = {
             'player1': None,
             'player2': None
         }
@@ -83,58 +96,179 @@ class ScoreDetector:
         
         return diff_mean > threshold
 
-    def detect_with_ocr(self, region: np.ndarray) -> Optional[int]:
-        """Detect score using OCR.
+    def preprocess_for_ocr(self, region: np.ndarray, strategy: int = 0) -> Optional[np.ndarray]:
+        """Preprocess image for OCR with multiple strategies.
         
         Args:
             region: Score region image (grayscale)
+            strategy: Preprocessing strategy (0=default, 1=aggressive, 2=adaptive)
             
         Returns:
-            Detected score or None if not detected
+            Preprocessed binary image or None
         """
-        # Preprocess image for better OCR
+        if region is None or region.size == 0:
+            return None
+        
         # Resize if too small
         h, w = region.shape
         if h < 20 or w < 40:
             region = cv2.resize(region, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
         
-        # Threshold to binary
-        _, binary = cv2.threshold(region, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        if strategy == 0:
+            # Default: OTSU threshold
+            _, binary = cv2.threshold(region, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            if np.mean(binary) > 127:
+                binary = cv2.bitwise_not(binary)
+        elif strategy == 1:
+            # Aggressive: Morphological operations for noise reduction
+            # Apply Gaussian blur first
+            blurred = cv2.GaussianBlur(region, (3, 3), 0)
+            _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            if np.mean(binary) > 127:
+                binary = cv2.bitwise_not(binary)
+            # Remove small noise
+            kernel = np.ones((2, 2), np.uint8)
+            binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+            binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+        else:  # strategy == 2
+            # Adaptive threshold
+            binary = cv2.adaptiveThreshold(
+                region, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            )
+            if np.mean(binary) > 127:
+                binary = cv2.bitwise_not(binary)
         
-        # Invert if needed (white text on dark background)
-        if np.mean(binary) > 127:
-            binary = cv2.bitwise_not(binary)
+        return binary
+
+    def detect_with_ocr(self, region: np.ndarray) -> Tuple[Optional[int], Optional[str]]:
+        """Detect score using OCR with multiple preprocessing strategies.
         
-        # OCR with digit-only whitelist
-        try:
-            text = pytesseract.image_to_string(
-                binary,
-                config='--psm 7 -c tessedit_char_whitelist=0123456789'
-            ).strip()
+        Args:
+            region: Score region image (grayscale)
             
-            if text:
-                # Extract first number found
-                score = int(text[0]) if text[0].isdigit() else None
-                # Try to parse full number
-                try:
-                    score = int(text)
-                except ValueError:
-                    # Try first sequence of digits
-                    digits = ''.join(c for c in text if c.isdigit())
-                    if digits:
-                        score = int(digits)
-                    else:
-                        score = None
+        Returns:
+            Tuple of (detected score, raw OCR text) or (None, None) if not detected
+        """
+        if region is None or region.size == 0:
+            return None, None
+        
+        # Try multiple preprocessing strategies and take consensus
+        scores_found = []
+        raw_texts = []
+        
+        for strategy in range(3):
+            binary = self.preprocess_for_ocr(region, strategy)
+            if binary is None:
+                continue
+            
+            # OCR with digit-only whitelist
+            try:
+                text = pytesseract.image_to_string(
+                    binary,
+                    config='--psm 7 -c tessedit_char_whitelist=0123456789'
+                ).strip()
                 
-                return score
-        except Exception as e:
-            # OCR failed
-            pass
+                raw_texts.append(text)
+                
+                if text:
+                    # Try to parse full number
+                    try:
+                        score = int(text)
+                        if 0 <= score <= 999:
+                            scores_found.append(score)
+                    except ValueError:
+                        # Try first sequence of digits
+                        digits = ''.join(c for c in text if c.isdigit())
+                        if digits:
+                            try:
+                                score = int(digits)
+                                if 0 <= score <= 999:
+                                    scores_found.append(score)
+                            except ValueError:
+                                pass
+            except Exception:
+                pass
+        
+        # Take most common score if multiple strategies agree
+        if scores_found:
+            # Count occurrences
+            score_counts = Counter(scores_found)
+            most_common = score_counts.most_common(1)[0]
+            
+            # Require at least 2 strategies to agree (consensus)
+            if most_common[1] >= 2:
+                raw_text = raw_texts[0] if raw_texts else None
+                if self.debug:
+                    print(f"  OCR: strategies={len(scores_found)}, consensus={most_common[0]} (count={most_common[1]}), raw_texts={raw_texts}")
+                return most_common[0], raw_text
+            elif self.debug:
+                print(f"  OCR: no consensus, scores={scores_found}, raw_texts={raw_texts}")
+        
+        return None, (raw_texts[0] if raw_texts else None)
+
+    def validate_score_temporal(self, score: Optional[int], player: str) -> Tuple[Optional[int], str]:
+        """Validate score using temporal consistency checks.
+        
+        Args:
+            score: Detected score to validate
+            player: 'player1' or 'player2'
+            
+        Returns:
+            Tuple of (validated score, reason) - score may be None if invalid
+        """
+        if score is None:
+            return None, "no score detected"
+        
+        last_valid = self.last_valid_scores[player]
+        
+        # First valid score is always accepted
+        if last_valid is None:
+            return score, "first valid score"
+        
+        # Score shouldn't decrease (unless game reset - but we'll be conservative)
+        if score < last_valid:
+            reason = f"score decreased ({last_valid} -> {score})"
+            if self.debug:
+                print(f"  Validation failed for {player}: {reason}")
+            return None, reason
+        
+        # Score shouldn't increase by more than reasonable amount per detection
+        # NBA Jam: typical score increments are 1-3 points, rarely more
+        # Allow up to 10 points increase to account for missed detections
+        max_increase = 10
+        if score > last_valid + max_increase:
+            reason = f"score increased too much ({last_valid} -> {score}, max {max_increase})"
+            if self.debug:
+                print(f"  Validation failed for {player}: {reason}")
+            return None, reason
+        
+        return score, "valid"
+    
+    def get_consensus_score(self, player: str) -> Optional[int]:
+        """Get consensus score from recent detections.
+        
+        Args:
+            player: 'player1' or 'player2'
+            
+        Returns:
+            Consensus score if enough consistent detections, None otherwise
+        """
+        history = self.score_history[player]
+        if len(history) < 2:
+            return None
+        
+        # Count occurrences of each score
+        score_counts = Counter(history)
+        most_common = score_counts.most_common(1)[0]
+        
+        # Require at least 2 consistent detections
+        if most_common[1] >= 2:
+            return most_common[0]
         
         return None
 
     def detect_score(self, frame: np.ndarray, player: str) -> Optional[int]:
-        """Detect score for a specific player.
+        """Detect score for a specific player with temporal validation and consensus.
         
         Args:
             frame: Full video frame
@@ -155,7 +289,8 @@ class ScoreDetector:
         
         # Check if region extraction failed
         if region is None:
-            return self.last_scores[player]  # Return cached score if available
+            # Return last valid score if available
+            return self.last_valid_scores[player]
         
         # Check for motion
         previous_region = self.last_frames.get(player)
@@ -170,22 +305,45 @@ class ScoreDetector:
         
         # Only process if motion detected or first frame
         if not has_motion and previous_region is not None:
-            # No motion, return cached score
-            return self.last_scores[player]
+            # No motion, return last valid score
+            return self.last_valid_scores[player]
         
-        # Try OCR detection
-        score = self.detect_with_ocr(region)
+        # Try OCR detection with multiple strategies
+        score, raw_text = self.detect_with_ocr(region)
         
-        # Validate score (reasonable range for arcade game)
+        if self.debug and raw_text:
+            print(f"  {player}: OCR raw='{raw_text}', detected={score}")
+        
+        # Validate score range (0-999)
         if score is not None and (score < 0 or score > 999):
+            if self.debug:
+                print(f"  {player}: Score {score} out of range (0-999)")
             score = None
         
-        # Update cached score
+        # Add to history for consensus
         if score is not None:
-            self.last_scores[player] = score
-        # Note: We don't clear cached score if None - let it persist
+            self.score_history[player].append(score)
         
-        return score
+        # Get consensus score from recent history
+        consensus_score = self.get_consensus_score(player)
+        
+        # Use consensus if available, otherwise use current detection
+        final_score = consensus_score if consensus_score is not None else score
+        
+        # Temporal validation
+        if final_score is not None:
+            validated_score, reason = self.validate_score_temporal(final_score, player)
+            if validated_score is not None:
+                # Update last valid score
+                self.last_valid_scores[player] = validated_score
+                if self.debug:
+                    print(f"  {player}: Score {validated_score} accepted ({reason})")
+                return validated_score
+            elif self.debug:
+                print(f"  {player}: Score {final_score} rejected ({reason}), keeping {self.last_valid_scores[player]}")
+        
+        # Return last valid score if current detection failed
+        return self.last_valid_scores[player]
 
     def detect_scores(self, frame: np.ndarray) -> Dict[str, Optional[int]]:
         """Detect scores for both players.
