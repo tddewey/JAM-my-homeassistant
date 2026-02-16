@@ -3,8 +3,12 @@
 import cv2
 import numpy as np
 import pytesseract
+import shutil
 from typing import Optional, Dict, Tuple, List
 from collections import deque, Counter
+from datetime import datetime
+from pathlib import Path
+import tempfile
 from config import DetectionConfig, ScoreRegion, TextRegion
 
 
@@ -22,6 +26,7 @@ class ScoreDetector:
         self.config = config
         self.debug = debug
         self.save_screenshots = save_screenshots
+        self.screenshot_dir = None  # Will be set by main if screenshots enabled
         self.last_frames: Dict[str, np.ndarray] = {}
         self.last_scores: Dict[str, Optional[int]] = {
             'player1': None,
@@ -230,13 +235,17 @@ class ScoreDetector:
         # Add tessedit_write_images=1 if screenshots enabled to save debug images
         ocr_config = '--psm 7 -c tessedit_char_whitelist=0123456789'
         if self.save_screenshots:
-            ocr_config += ' tessedit_write_images=1'
+            ocr_config += ' -c tessedit_write_images=1'
         
         try:
             text = pytesseract.image_to_string(
                 binary,
                 config=ocr_config
             ).strip()
+            
+            # Collect debug images immediately after OCR completes
+            if self.save_screenshots:
+                self._collect_tesseract_debug_images()
             
             if text:
                 # Try to parse full number
@@ -401,6 +410,49 @@ class ScoreDetector:
         
         # Return last valid score if current detection failed
         return self.last_valid_scores[player]
+
+    def _collect_tesseract_debug_images(self) -> None:
+        """Collect Tesseract debug images immediately after OCR.
+        
+        Tesseract writes debug images with prefix 'tessinput.*.png' to the
+        current working directory when tessedit_write_images=1 is set.
+        """
+        if not self.save_screenshots or self.screenshot_dir is None:
+            return
+        
+        try:
+            # Find Tesseract debug images in current directory
+            cwd = Path.cwd()
+            debug_images = list(cwd.glob("tessinput.*.png"))
+            
+            if not debug_images:
+                # Also check temp directory
+                temp_dir = Path(tempfile.gettempdir())
+                debug_images = list(temp_dir.glob("tessinput.*.png"))
+            
+            if debug_images:
+                timestamp_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                
+                for i, debug_image in enumerate(debug_images):
+                    # Create descriptive filename
+                    original_name = debug_image.stem
+                    new_name = f"tesseract_debug_{timestamp_str}_{i:02d}_{original_name}.png"
+                    dest_path = self.screenshot_dir / new_name
+                    
+                    # Copy to screenshot directory
+                    shutil.copy2(debug_image, dest_path)
+                    
+                    if self.debug:
+                        print(f"  Saved Tesseract debug image: {new_name}")
+                    
+                    # Remove original temp file
+                    try:
+                        debug_image.unlink()
+                    except Exception:
+                        pass
+        except Exception as e:
+            if self.debug:
+                print(f"  Warning: Failed to collect Tesseract debug images: {e}")
 
     def detect_scores(self, frame: np.ndarray, color_frame: Optional[np.ndarray] = None) -> Dict[str, Optional[int]]:
         """Detect scores for both players.

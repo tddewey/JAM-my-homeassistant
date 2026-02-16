@@ -158,7 +158,7 @@ class TextDetector:
             # Add tessedit_write_images=1 if screenshots enabled to save debug images
             ocr_config = '--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 '
             if self.save_screenshots:
-                ocr_config += 'tessedit_write_images=1'
+                ocr_config += '-c tessedit_write_images=1'
             
             text = pytesseract.image_to_string(
                 region,

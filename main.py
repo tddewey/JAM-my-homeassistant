@@ -54,6 +54,10 @@ class NBAJamDetector:
         self.performance_monitor = PerformanceMonitor() if self.monitor_cpu else None
         self.screenshot_manager = ScreenshotManager(config.screenshots) if self.save_screenshots else None
         
+        # Set screenshot directory in detectors so they can save debug images
+        if self.save_screenshots and self.screenshot_manager:
+            self.score_detector.screenshot_dir = self.screenshot_manager.screenshot_dir
+        
         # Track last published values
         self.last_published_state = None
         self.last_published_scores = {'player1': None, 'player2': None}
