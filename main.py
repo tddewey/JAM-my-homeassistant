@@ -57,6 +57,7 @@ class NBAJamDetector:
         # Set screenshot directory in detectors so they can save debug images
         if self.save_screenshots and self.screenshot_manager:
             self.score_detector.screenshot_dir = self.screenshot_manager.screenshot_dir
+            self.state_detector.text_detector.screenshot_dir = self.screenshot_manager.screenshot_dir
         
         # Track last published values
         self.last_published_state = None

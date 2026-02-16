@@ -231,11 +231,14 @@ class ScoreDetector:
         if binary is None:
             return None, None
         
+        # Save preprocessed image for debugging if screenshots enabled
+        if self.save_screenshots and self.screenshot_dir is not None:
+            self._save_preprocessed_image(binary, "score_preprocessed")
+        
         # OCR with digit-only whitelist
-        # Add tessedit_write_images=1 if screenshots enabled to save debug images
+        # Note: tessedit_write_images=1 doesn't work reliably via command-line
+        # We save preprocessed images ourselves instead
         ocr_config = '--psm 7 -c tessedit_char_whitelist=0123456789'
-        if self.save_screenshots:
-            ocr_config += ' -c tessedit_write_images=1'
         
         try:
             text = pytesseract.image_to_string(
@@ -243,7 +246,7 @@ class ScoreDetector:
                 config=ocr_config
             ).strip()
             
-            # Collect debug images immediately after OCR completes
+            # Try to collect Tesseract debug images (may not work)
             if self.save_screenshots:
                 self._collect_tesseract_debug_images()
             
@@ -411,15 +414,36 @@ class ScoreDetector:
         # Return last valid score if current detection failed
         return self.last_valid_scores[player]
 
+    def _save_preprocessed_image(self, binary_image: np.ndarray, prefix: str) -> None:
+        """Save preprocessed image for debugging.
+        
+        Args:
+            binary_image: Preprocessed binary image
+            prefix: Prefix for filename (e.g., "score_preprocessed", "quarter_preprocessed")
+        """
+        if not self.save_screenshots or self.screenshot_dir is None:
+            return
+        
+        try:
+            timestamp_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")[:-3]  # Include milliseconds
+            filename = f"{prefix}_{timestamp_str}.png"
+            dest_path = self.screenshot_dir / filename
+            cv2.imwrite(str(dest_path), binary_image)
+            
+            if self.debug:
+                print(f"  Saved preprocessed image: {filename}")
+        except Exception as e:
+            if self.debug:
+                print(f"  Warning: Failed to save preprocessed image: {e}")
+
     def _collect_tesseract_debug_images(self) -> None:
         """Collect Tesseract debug images immediately after OCR.
         
         Tesseract writes debug images with prefix 'tessinput.*.png' to the
         current working directory when tessedit_write_images=1 is set.
+        Note: This may not work reliably - we save preprocessed images instead.
         """
         if not self.save_screenshots or self.screenshot_dir is None:
-            if self.debug:
-                print(f"  Debug images: save_screenshots={self.save_screenshots}, screenshot_dir={self.screenshot_dir}")
             return
         
         try:
@@ -427,15 +451,10 @@ class ScoreDetector:
             cwd = Path.cwd()
             debug_images = list(cwd.glob("tessinput.*.png"))
             
-            if self.debug:
-                print(f"  Debug images: Found {len(debug_images)} in {cwd}")
-            
             if not debug_images:
                 # Also check temp directory
                 temp_dir = Path(tempfile.gettempdir())
                 debug_images = list(temp_dir.glob("tessinput.*.png"))
-                if self.debug:
-                    print(f"  Debug images: Found {len(debug_images)} in {temp_dir}")
             
             if debug_images:
                 timestamp_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

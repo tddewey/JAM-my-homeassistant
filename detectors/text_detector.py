@@ -19,6 +19,8 @@ class TextDetector:
         """
         self.config = config
         self.save_screenshots = save_screenshots
+        self.screenshot_dir = None  # Will be set by main if screenshots enabled
+        self.screenshot_dir = None  # Will be set by main if screenshots enabled
 
     def has_purple_band(self, frame: np.ndarray) -> bool:
         """Check if purple band is present in quarter text region.
@@ -200,11 +202,19 @@ class TextDetector:
         if binary is None:
             return None
         
+        # Save preprocessed image for debugging if screenshots enabled
+        if self.save_screenshots and self.screenshot_dir is not None:
+            self._save_preprocessed_image(binary, "quarter_preprocessed")
+        
         # Detect text
         text = self.detect_text(binary)
         
         if not text:
             return None
+        
+        # Save preprocessed image for debugging if screenshots enabled
+        if self.save_screenshots and self.screenshot_dir is not None:
+            self._save_preprocessed_image(binary, "quarter_preprocessed")
         
         # Parse quarter/period information
         text_lower = text.lower()
@@ -314,4 +324,22 @@ class TextDetector:
             return "PRESS SHOOT TO SELECT"
         
         return None
+
+    def _save_preprocessed_image(self, binary_image: np.ndarray, prefix: str) -> None:
+        """Save preprocessed image for debugging.
+        
+        Args:
+            binary_image: Preprocessed binary image
+            prefix: Prefix for filename (e.g., "score_preprocessed", "quarter_preprocessed")
+        """
+        if not self.save_screenshots or self.screenshot_dir is None:
+            return
+        
+        try:
+            timestamp_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")[:-3]  # Include milliseconds
+            filename = f"{prefix}_{timestamp_str}.png"
+            dest_path = self.screenshot_dir / filename
+            cv2.imwrite(str(dest_path), binary_image)
+        except Exception:
+            pass  # Don't fail on debug image save
 
