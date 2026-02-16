@@ -109,7 +109,7 @@ class BaseOCRDetector:
             print(f"  Purple check: {np.sum(purple_mask)}/{roi.size} pixels match ({purple_ratio*100:.1f}%), threshold=10%")
             print(f"  Purple check: Result={purple_ratio > 0.1}")
         
-        return purple_ratio > 0.1  # At least 10% of region is purple
+        return purple_ratio > 0.08  # At least 8% of region is purple
 
     def preprocess_for_ocr(self, region: np.ndarray, strategy: int = 0) -> Optional[np.ndarray]:
         """Preprocess image region for better OCR with multiple strategies.
