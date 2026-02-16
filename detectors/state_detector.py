@@ -22,14 +22,15 @@ class GameState(Enum):
 class StateDetector:
     """Detects game state from video frames using text-based OCR detection."""
 
-    def __init__(self, config: DetectionConfig):
+    def __init__(self, config: DetectionConfig, save_screenshots: bool = False):
         """Initialize state detector.
         
         Args:
             config: Detection configuration
+            save_screenshots: Enable saving Tesseract debug images
         """
         self.config = config
-        self.text_detector = TextDetector(config)
+        self.text_detector = TextDetector(config, save_screenshots=save_screenshots)
         self.current_state = GameState.NOT_PLAYING
         # Frame history: keep last N quarter detections to catch brief displays
         self.quarter_history: deque = deque(maxlen=5)  # Last 5 frames

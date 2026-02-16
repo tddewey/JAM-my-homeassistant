@@ -11,15 +11,17 @@ from config import DetectionConfig, ScoreRegion, TextRegion
 class ScoreDetector:
     """Detects scores from video frames using template matching and OCR."""
 
-    def __init__(self, config: DetectionConfig, debug: bool = False):
+    def __init__(self, config: DetectionConfig, debug: bool = False, save_screenshots: bool = False):
         """Initialize score detector.
         
         Args:
             config: Detection configuration
             debug: Enable debug logging
+            save_screenshots: Enable saving Tesseract debug images
         """
         self.config = config
         self.debug = debug
+        self.save_screenshots = save_screenshots
         self.last_frames: Dict[str, np.ndarray] = {}
         self.last_scores: Dict[str, Optional[int]] = {
             'player1': None,
@@ -225,10 +227,15 @@ class ScoreDetector:
             return None, None
         
         # OCR with digit-only whitelist
+        # Add tessedit_write_images=1 if screenshots enabled to save debug images
+        ocr_config = '--psm 7 -c tessedit_char_whitelist=0123456789'
+        if self.save_screenshots:
+            ocr_config += ' tessedit_write_images=1'
+        
         try:
             text = pytesseract.image_to_string(
                 binary,
-                config='--psm 7 -c tessedit_char_whitelist=0123456789'
+                config=ocr_config
             ).strip()
             
             if text:

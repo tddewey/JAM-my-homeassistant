@@ -48,8 +48,8 @@ class NBAJamDetector:
         
         # Initialize components
         self.video_capture = VideoCapture(config.video)
-        self.score_detector = ScoreDetector(config.detection, debug=debug)
-        self.state_detector = StateDetector(config.detection)
+        self.score_detector = ScoreDetector(config.detection, debug=debug, save_screenshots=self.save_screenshots)
+        self.state_detector = StateDetector(config.detection, save_screenshots=self.save_screenshots)
         self.mqtt_client = MQTTClient(config.mqtt)
         self.performance_monitor = PerformanceMonitor() if self.monitor_cpu else None
         self.screenshot_manager = ScreenshotManager(config.screenshots) if self.save_screenshots else None

@@ -10,13 +10,15 @@ from config import DetectionConfig, TextRegion
 class TextDetector:
     """Detects text from video frames using OCR for state detection."""
 
-    def __init__(self, config: DetectionConfig):
+    def __init__(self, config: DetectionConfig, save_screenshots: bool = False):
         """Initialize text detector.
         
         Args:
             config: Detection configuration
+            save_screenshots: Enable saving Tesseract debug images
         """
         self.config = config
+        self.save_screenshots = save_screenshots
 
     def has_purple_band(self, frame: np.ndarray) -> bool:
         """Check if purple band is present in quarter text region.
@@ -153,9 +155,14 @@ class TextDetector:
             # PSM 7: Treat image as a single text line
             # PSM 8: Treat image as a single word
             # PSM 6: Assume a single uniform block of text
+            # Add tessedit_write_images=1 if screenshots enabled to save debug images
+            ocr_config = '--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 '
+            if self.save_screenshots:
+                ocr_config += 'tessedit_write_images=1'
+            
             text = pytesseract.image_to_string(
                 region,
-                config='--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 '
+                config=ocr_config
             ).strip().upper()
             
             return text

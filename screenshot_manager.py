@@ -3,6 +3,8 @@
 import os
 import cv2
 import numpy as np
+import glob
+import shutil
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Dict
@@ -61,6 +63,9 @@ class ScreenshotManager:
             
             # Save screenshot
             cv2.imwrite(str(filepath), annotated_frame)
+            
+            # Collect and save Tesseract debug images (if any)
+            self._save_tesseract_debug_images(timestamp)
             
             self.screenshot_count += 1
             
@@ -372,4 +377,47 @@ class ScreenshotManager:
             return len(list(self.screenshot_dir.glob("screenshot_*.jpg")))
         except Exception:
             return 0
+
+    def _save_tesseract_debug_images(self, timestamp: datetime) -> None:
+        """Collect and save Tesseract debug images to screenshot directory.
+        
+        Tesseract writes debug images with prefix 'tessinput.*.png' to the
+        current working directory when tessedit_write_images=1 is set.
+        
+        Args:
+            timestamp: Timestamp to use for naming debug images
+        """
+        try:
+            # Find Tesseract debug images in current directory
+            # Tesseract creates files like: tessinput.1234567890.exp0.png, tessinput.1234567890.exp1.png, etc.
+            cwd = Path.cwd()
+            debug_images = list(cwd.glob("tessinput.*.png"))
+            
+            if not debug_images:
+                # Also check temp directory
+                import tempfile
+                temp_dir = Path(tempfile.gettempdir())
+                debug_images = list(temp_dir.glob("tessinput.*.png"))
+            
+            if debug_images:
+                timestamp_str = timestamp.strftime("%Y-%m-%d_%H-%M-%S")
+                
+                for i, debug_image in enumerate(debug_images):
+                    # Create descriptive filename
+                    # Extract the original tessinput name to preserve info
+                    original_name = debug_image.stem  # e.g., "tessinput.1234567890.exp0"
+                    new_name = f"tesseract_debug_{timestamp_str}_{i:02d}_{original_name}.png"
+                    dest_path = self.screenshot_dir / new_name
+                    
+                    # Copy to screenshot directory
+                    shutil.copy2(debug_image, dest_path)
+                    
+                    # Remove original temp file
+                    try:
+                        debug_image.unlink()
+                    except Exception:
+                        pass  # Ignore errors cleaning up temp files
+        except Exception as e:
+            # Don't fail screenshot save if debug image collection fails
+            print(f"Warning: Failed to collect Tesseract debug images: {e}")
 
