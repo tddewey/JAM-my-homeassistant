@@ -83,6 +83,8 @@ class ScoreDetector:
         """
         # Reuse quarter text region for purple detection
         if self.config.quarter_text_region is None:
+            if self.debug:
+                print("  Purple check: No quarter_text_region configured")
             return False
         
         # Extract region from color frame (don't convert to grayscale)
@@ -94,11 +96,25 @@ class ScoreDetector:
         y2 = min(h, region.y + region.height)
         
         if x2 <= x1 or y2 <= y1:
+            if self.debug:
+                print(f"  Purple check: Invalid region bounds ({x1},{y1}) to ({x2},{y2})")
             return False
         
         roi = frame[y1:y2, x1:x2]
         if roi.size == 0 or len(roi.shape) != 3:
+            if self.debug:
+                print(f"  Purple check: Invalid ROI (size={roi.size}, shape={roi.shape if roi.size > 0 else 'empty'})")
             return False
+        
+        # Debug: Show actual color statistics
+        if self.debug:
+            b_mean = np.mean(roi[:, :, 0])
+            g_mean = np.mean(roi[:, :, 1])
+            r_mean = np.mean(roi[:, :, 2])
+            b_min, b_max = np.min(roi[:, :, 0]), np.max(roi[:, :, 0])
+            g_min, g_max = np.min(roi[:, :, 1]), np.max(roi[:, :, 1])
+            r_min, r_max = np.min(roi[:, :, 2]), np.max(roi[:, :, 2])
+            print(f"  Purple check: Region BGR - B: mean={b_mean:.1f} ({b_min}-{b_max}), G: mean={g_mean:.1f} ({g_min}-{g_max}), R: mean={r_mean:.1f} ({r_min}-{r_max})")
         
         # Purple in BGR: B and R are high, G is low
         # Typical purple: B=100-220, G=0-80, R=100-220
@@ -109,8 +125,19 @@ class ScoreDetector:
             (roi[:, :, 2] >= 100) & (roi[:, :, 2] <= 220)    # R channel
         )
         
-        purple_ratio = np.sum(purple_mask) / roi.size
-        return purple_ratio > 0.1  # At least 10% of region is purple
+        purple_pixels = np.sum(purple_mask)
+        total_pixels = roi.size // 3  # Divide by 3 for BGR channels
+        purple_ratio = purple_pixels / total_pixels if total_pixels > 0 else 0.0
+        
+        if self.debug:
+            print(f"  Purple check: {purple_pixels}/{total_pixels} pixels match ({purple_ratio*100:.1f}%), threshold=10%")
+        
+        result = purple_ratio > 0.1  # At least 10% of region is purple
+        
+        if self.debug:
+            print(f"  Purple check: Result={result}")
+        
+        return result
 
     def detect_motion(self, current: Optional[np.ndarray], previous: Optional[np.ndarray], 
                      threshold: float) -> bool:
