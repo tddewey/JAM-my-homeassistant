@@ -156,9 +156,9 @@ class TextDetector:
             # PSM 8: Treat image as a single word
             # PSM 6: Assume a single uniform block of text
             # Add tessedit_write_images=1 if screenshots enabled to save debug images
-            ocr_config = '--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 '
+            ocr_config = '--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
             if self.save_screenshots:
-                ocr_config += '-c tessedit_write_images=1'
+                ocr_config += ' -c tessedit_write_images=1'
             
             text = pytesseract.image_to_string(
                 region,

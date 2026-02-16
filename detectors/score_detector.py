@@ -418,6 +418,8 @@ class ScoreDetector:
         current working directory when tessedit_write_images=1 is set.
         """
         if not self.save_screenshots or self.screenshot_dir is None:
+            if self.debug:
+                print(f"  Debug images: save_screenshots={self.save_screenshots}, screenshot_dir={self.screenshot_dir}")
             return
         
         try:
@@ -425,10 +427,15 @@ class ScoreDetector:
             cwd = Path.cwd()
             debug_images = list(cwd.glob("tessinput.*.png"))
             
+            if self.debug:
+                print(f"  Debug images: Found {len(debug_images)} in {cwd}")
+            
             if not debug_images:
                 # Also check temp directory
                 temp_dir = Path(tempfile.gettempdir())
                 debug_images = list(temp_dir.glob("tessinput.*.png"))
+                if self.debug:
+                    print(f"  Debug images: Found {len(debug_images)} in {temp_dir}")
             
             if debug_images:
                 timestamp_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
