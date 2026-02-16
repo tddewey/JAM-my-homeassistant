@@ -199,10 +199,10 @@ class BaseOCRDetector:
         if color_region is None or color_region.size == 0 or len(color_region.shape) != 3:
             return 'unknown'
         
-        # Get the top 20% brightest pixels (likely to be text)
+        # Get the top 30% brightest pixels (more lenient - likely to be text)
         # Convert to grayscale for brightness detection
         gray = cv2.cvtColor(color_region, cv2.COLOR_BGR2GRAY)
-        threshold = np.percentile(gray, 80)  # Top 20% brightest pixels
+        threshold = np.percentile(gray, 70)  # Top 30% brightest pixels
         bright_mask = gray >= threshold
         
         if np.sum(bright_mask) == 0:
@@ -216,14 +216,12 @@ class BaseOCRDetector:
         if self.debug:
             print(f"  Text color analysis: B={b_mean:.1f}, G={g_mean:.1f}, R={r_mean:.1f} (bright pixels only)")
         
-        # White text: B, G, R all high (relaxed thresholds)
-        # Lowered from 200 to 180 to account for slight color variations
-        if b_mean > 180 and g_mean > 180 and r_mean > 180:
+        # White text: Lowered threshold to 140 (was 180) to catch medium-brightness text
+        if b_mean > 140 and g_mean > 140 and r_mean > 140:
             return 'white'
         
-        # Red text: R high, B and G low (relaxed thresholds)
-        # R should be significantly higher than B and G
-        if r_mean > 180 and r_mean > (b_mean + 50) and r_mean > (g_mean + 50) and b_mean < 120 and g_mean < 120:
+        # Red text: More lenient - R should be higher than B and G
+        if r_mean > 140 and r_mean > (b_mean + 30) and r_mean > (g_mean + 30):
             return 'red'
         
         return 'unknown'

@@ -30,16 +30,16 @@ class ScoreDetector(BaseOCRDetector):
             color_region: Color/BGR image region
             
         Returns:
-            Binary image with dark text on light background, or None if invalid
+            Binary image (will be inverted by ensure_dark_on_light in detect_with_ocr)
         """
         if color_region is None or color_region.size == 0 or len(color_region.shape) != 3:
             return None
         
-        # Create mask for red pixels (R high, B and G low)
+        # Create mask for red pixels (more lenient thresholds)
         red_mask = (
-            (color_region[:, :, 2] > 200) &  # R channel high
-            (color_region[:, :, 0] < 100) &  # B channel low
-            (color_region[:, :, 1] < 100)    # G channel low
+            (color_region[:, :, 2] > 150) &  # R channel high (lowered from 200)
+            (color_region[:, :, 0] < 120) &  # B channel low (raised from 100)
+            (color_region[:, :, 1] < 120)    # G channel low (raised from 100)
         )
         
         # Convert to grayscale
@@ -48,12 +48,16 @@ class ScoreDetector(BaseOCRDetector):
         # Convert red pixels to white (enhance contrast)
         gray[red_mask] = 255
         
+        # Also enhance any bright pixels (likely text) - top 30% brightest
+        bright_threshold = np.percentile(gray, 70)
+        bright_mask = gray >= bright_threshold
+        gray[bright_mask] = 255
+        
         # Apply OTSU threshold
         _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
-        # Ensure dark text on light background
-        binary = self.ensure_dark_on_light(binary)
-        
+        # DON'T call ensure_dark_on_light here - let detect_with_ocr handle it
+        # This prevents double inversion
         return binary
 
     def detect_with_ocr(self, region: np.ndarray, color_region: Optional[np.ndarray] = None) -> Tuple[Optional[int], Optional[str]]:
@@ -92,6 +96,7 @@ class ScoreDetector(BaseOCRDetector):
             if color_region is not None:
                 red_binary = self.preprocess_red_text(color_region)
                 if red_binary is not None:
+                    red_binary = self.ensure_dark_on_light(red_binary)
                     red_binary = self.add_border(red_binary)
                     strategies.append(('red', red_binary))
             else:
@@ -109,6 +114,14 @@ class ScoreDetector(BaseOCRDetector):
                 binary = self.ensure_dark_on_light(binary)
                 binary = self.add_border(binary)
                 strategies.append(('adaptive', binary))
+        
+        # Strategy 3: Aggressive preprocessing for unknown text
+        if text_color == 'unknown':
+            binary = self.preprocess_for_ocr(region, strategy=2)  # Aggressive
+            if binary is not None:
+                binary = self.ensure_dark_on_light(binary)
+                binary = self.add_border(binary)
+                strategies.append(('aggressive', binary))
         
         # Try each strategy in sequence
         ocr_config = '--psm 7 -c tessedit_char_whitelist=0123456789'
