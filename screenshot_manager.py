@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from config import ScreenshotConfig, DetectionConfig, ScoreRegion, TextRegion
-from detectors.state_detector import GameState
+from detectors.game_quarter_detector import GameState
 
 
 class ScreenshotManager:

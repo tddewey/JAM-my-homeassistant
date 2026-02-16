@@ -14,7 +14,7 @@ from colorama import init, Fore, Style
 from config import Config
 from video_capture import VideoCapture
 from detectors.score_detector import ScoreDetector
-from detectors.state_detector import StateDetector, GameState
+from detectors.game_quarter_detector import GameQuarterDetector, GameState
 from mqtt_client import MQTTClient
 from performance_monitor import PerformanceMonitor
 from screenshot_manager import ScreenshotManager
@@ -49,7 +49,7 @@ class NBAJamDetector:
         # Initialize components
         self.video_capture = VideoCapture(config.video)
         self.score_detector = ScoreDetector(config.detection, debug=debug, save_screenshots=self.save_screenshots)
-        self.state_detector = StateDetector(config.detection, save_screenshots=self.save_screenshots)
+        self.quarter_detector = GameQuarterDetector(config.detection, save_screenshots=self.save_screenshots)
         self.mqtt_client = MQTTClient(config.mqtt)
         self.performance_monitor = PerformanceMonitor() if self.monitor_cpu else None
         self.screenshot_manager = ScreenshotManager(config.screenshots) if self.save_screenshots else None
@@ -57,7 +57,7 @@ class NBAJamDetector:
         # Set screenshot directory in detectors so they can save debug images
         if self.save_screenshots and self.screenshot_manager:
             self.score_detector.screenshot_dir = self.screenshot_manager.screenshot_dir
-            self.state_detector.text_detector.screenshot_dir = self.screenshot_manager.screenshot_dir
+            self.quarter_detector.screenshot_dir = self.screenshot_manager.screenshot_dir
         
         # Track last published values
         self.last_published_state = None
@@ -66,8 +66,6 @@ class NBAJamDetector:
         
         # Track last state for screenshot capture
         self.last_state = None
-        # Track last saved scores for screenshot capture on score changes
-        self.last_saved_scores = {'player1': None, 'player2': None}
 
     def log(self, message: str, color: str = ""):
         """Log message with timestamp.
@@ -220,7 +218,7 @@ class NBAJamDetector:
                     state_frame = frame
                 
                 # Detect game state
-                state = self.state_detector.detect_state(state_frame)
+                state = self.quarter_detector.detect_state(state_frame)
                 
                 # Detect scores - pass color frame for purple detection, grayscale for OCR
                 scores = self.score_detector.detect_scores(score_frame, color_frame=state_frame)
@@ -228,18 +226,11 @@ class NBAJamDetector:
                 # Check for state change
                 state_changed = state != self.last_state
                 
-                # Check for score changes
-                p1_score = scores.get('player1')
-                p2_score = scores.get('player2')
-                score_changed = (
-                    p1_score is not None and p1_score != self.last_saved_scores.get('player1')
-                ) or (
-                    p2_score is not None and p2_score != self.last_saved_scores.get('player2')
-                )
+                # Check if scores were detected (any non-None score)
+                scores_detected = scores.get('player1') is not None or scores.get('player2') is not None
                 
-                # Capture screenshot on state change or score change
-                # Use the exact frame that OCR was run on (convert grayscale back to color if needed)
-                if self.screenshot_manager and (state_changed or score_changed):
+                # Capture screenshot on state change or when scores are detected
+                if self.screenshot_manager and (state_changed or scores_detected):
                     # If score_frame is grayscale, convert back to BGR for screenshot
                     if len(score_frame.shape) == 2:
                         screenshot_frame = cv2.cvtColor(score_frame, cv2.COLOR_GRAY2BGR)
@@ -250,20 +241,12 @@ class NBAJamDetector:
                         screenshot_frame, state, scores, self.config.detection
                     )
                     if screenshot_path:
-                        change_type = "state change" if state_changed else "score change"
+                        change_type = "state change" if state_changed else "score detected"
                         self.log(f"Screenshot saved ({change_type}): {screenshot_path}", Fore.CYAN)
                     
                     # Update tracking
                     if state_changed:
                         self.last_state = state
-                    if score_changed:
-                        self.last_saved_scores['player1'] = p1_score
-                        self.last_saved_scores['player2'] = p2_score
-                elif self.last_state is None:
-                    # Initialize last_state and last_saved_scores on first frame
-                    self.last_state = state
-                    self.last_saved_scores['player1'] = p1_score
-                    self.last_saved_scores['player2'] = p2_score
                 
                 # Calculate processing time
                 processing_time = time.time() - frame_start
