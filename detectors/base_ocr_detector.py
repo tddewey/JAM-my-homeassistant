@@ -106,8 +106,8 @@ class BaseOCRDetector:
             b_mean = np.mean(roi[:, :, 0])
             g_mean = np.mean(roi[:, :, 1])
             r_mean = np.mean(roi[:, :, 2])
-            print(f"  Purple check: {np.sum(purple_mask)}/{roi.size} pixels match ({purple_ratio*100:.1f}%), threshold=10%")
-            print(f"  Purple check: Result={purple_ratio > 0.1}")
+            print(f"  Purple check: {np.sum(purple_mask)}/{roi.size} pixels match ({purple_ratio*100:.1f}%), threshold=8%")
+            print(f"  Purple check: Result={purple_ratio > 0.08}")
         
         return purple_ratio > 0.08  # At least 8% of region is purple
 
@@ -187,6 +187,9 @@ class BaseOCRDetector:
     def detect_text_color(self, color_region: np.ndarray) -> str:
         """Detect if text in region is white or red.
         
+        Uses percentile-based detection to find the brightest pixels (likely text)
+        rather than mean values which can be skewed by background.
+        
         Args:
             color_region: Color/BGR image region
             
@@ -196,17 +199,31 @@ class BaseOCRDetector:
         if color_region is None or color_region.size == 0 or len(color_region.shape) != 3:
             return 'unknown'
         
-        # Calculate mean values for each channel
-        b_mean = np.mean(color_region[:, :, 0])
-        g_mean = np.mean(color_region[:, :, 1])
-        r_mean = np.mean(color_region[:, :, 2])
+        # Get the top 20% brightest pixels (likely to be text)
+        # Convert to grayscale for brightness detection
+        gray = cv2.cvtColor(color_region, cv2.COLOR_BGR2GRAY)
+        threshold = np.percentile(gray, 80)  # Top 20% brightest pixels
+        bright_mask = gray >= threshold
         
-        # White text: B, G, R all high (e.g., > 200)
-        if b_mean > 200 and g_mean > 200 and r_mean > 200:
+        if np.sum(bright_mask) == 0:
+            return 'unknown'
+        
+        # Calculate mean values for bright pixels only (likely text)
+        b_mean = np.mean(color_region[bright_mask, 0])
+        g_mean = np.mean(color_region[bright_mask, 1])
+        r_mean = np.mean(color_region[bright_mask, 2])
+        
+        if self.debug:
+            print(f"  Text color analysis: B={b_mean:.1f}, G={g_mean:.1f}, R={r_mean:.1f} (bright pixels only)")
+        
+        # White text: B, G, R all high (relaxed thresholds)
+        # Lowered from 200 to 180 to account for slight color variations
+        if b_mean > 180 and g_mean > 180 and r_mean > 180:
             return 'white'
         
-        # Red text: R high, B and G low (e.g., R > 200, B < 100, G < 100)
-        if r_mean > 200 and b_mean < 100 and g_mean < 100:
+        # Red text: R high, B and G low (relaxed thresholds)
+        # R should be significantly higher than B and G
+        if r_mean > 180 and r_mean > (b_mean + 50) and r_mean > (g_mean + 50) and b_mean < 120 and g_mean < 120:
             return 'red'
         
         return 'unknown'

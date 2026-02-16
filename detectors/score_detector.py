@@ -118,6 +118,13 @@ class ScoreDetector(BaseOCRDetector):
             if self.save_screenshots and self.screenshot_dir is not None:
                 self._save_preprocessed_image(binary, f"score_{strategy_name}")
             
+            # Additional debug info for failed detections
+            if self.debug:
+                # Check image statistics
+                mean_val = np.mean(binary)
+                std_val = np.std(binary)
+                print(f"  Strategy {strategy_name}: image stats - mean={mean_val:.1f}, std={std_val:.1f}, shape={binary.shape}")
+            
             try:
                 text = pytesseract.image_to_string(binary, config=ocr_config).strip()
                 
