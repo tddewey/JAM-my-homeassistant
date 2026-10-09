@@ -9,7 +9,6 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from config import ScreenshotConfig, DetectionConfig, ScoreRegion, TextRegion
-from detectors.game_quarter_detector import GameState
 
 
 class ScreenshotManager:
@@ -34,7 +33,7 @@ class ScreenshotManager:
     def capture_screenshot(
         self,
         frame: np.ndarray,
-        state: GameState,
+        state: str,
         scores: Dict[str, Optional[int]],
         detection_config: DetectionConfig
     ) -> Optional[str]:
@@ -84,7 +83,7 @@ class ScreenshotManager:
     def _annotate_frame(
         self,
         frame: np.ndarray,
-        state: GameState,
+        state: str,
         scores: Dict[str, Optional[int]],
         detection_config: DetectionConfig
     ) -> np.ndarray:
@@ -198,7 +197,7 @@ class ScreenshotManager:
     def _draw_info_overlay(
         self,
         frame: np.ndarray,
-        state: GameState,
+        state: str,
         scores: Dict[str, Optional[int]],
         width: int,
         height: int
@@ -232,19 +231,18 @@ class ScreenshotManager:
         
         # Game state
         state_color = {
-            GameState.NOT_PLAYING: (128, 128, 128),  # Gray
-            GameState.PLAYING: (255, 255, 0),        # Cyan
-            GameState.Q1: (0, 255, 0),               # Green
-            GameState.Q2: (0, 255, 0),               # Green
-            GameState.Q3: (0, 255, 0),               # Green
-            GameState.Q4: (0, 255, 0),               # Green
-            GameState.HALFTIME: (0, 165, 255),       # Orange
-            GameState.GAME_OVER: (0, 0, 255)         # Red
+            'not_playing': (128, 128, 128),  # Gray
+            'team_select': (255, 255, 0),
+            'starting': (255, 255, 0),
+            'tipoff': (0, 255, 255),
+            'q1': (0, 255, 0), 'q2': (0, 255, 0), 'q3': (0, 255, 0), 'q4': (0, 255, 0),
+            'halftime': (0, 165, 255),               # Orange
+            'game_over': (0, 0, 255)                 # Red
         }.get(state, (255, 255, 255))
         
         cv2.putText(
             overlay,
-            f"State: {state.value}",
+            f"State: {state}",
             (20, y_start),
             font,
             font_scale,
@@ -297,7 +295,7 @@ class ScreenshotManager:
 
     def _get_screenshot_path(
         self,
-        state: GameState,
+        state: str,
         scores: Dict[str, Optional[int]],
         timestamp: datetime
     ) -> str:
@@ -312,7 +310,7 @@ class ScreenshotManager:
             Filename string
         """
         timestamp_str = timestamp.strftime("%Y-%m-%d_%H-%M-%S")
-        state_str = state.value
+        state_str = state
         
         p1_score = scores.get('player1')
         p2_score = scores.get('player2')

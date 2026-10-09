@@ -55,6 +55,8 @@ class VideoCapture:
             if self.config.fourcc:
                 self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self.config.fourcc))
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            if self.config.fps:
+                self.cap.set(cv2.CAP_PROP_FPS, self.config.fps)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.capture_width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.capture_height)
             

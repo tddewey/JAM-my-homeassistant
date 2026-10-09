@@ -4,7 +4,8 @@ video:
   # Path to video capture device (typically /dev/video0 or /dev/video1)
   device_path: /dev/video0
   # Interval between frame captures in seconds
-  frame_interval: 0.5
+  # (0.25 gives sub-second score latency: a score needs 3 agreeing reads)
+  frame_interval: 0.25
   # Capture resolution
   capture_width: 1920
   capture_height: 1080
@@ -15,11 +16,18 @@ video:
   reference_height: 1080
   # Early grayscale conversion (reduces memory and processing)
   use_grayscale: true
+  # Capture rate requested from the card (frames are still only processed every
+  # frame_interval; a low rate just saves conversion work). Omit for the card default.
+  fps: 15
   # Pixel format requested from the capture card. YUYV is uncompressed (no JPEG
   # artifacts, best for template matching); MJPG uses less USB bandwidth.
   fourcc: YUYV
 
 detection:
+  # Learned templates (see build_templates.py / build_scene_templates.py)
+  templates_path: templates/nbajam.npz
+  scenes_path: templates/scenes.npz
+
   # Regions measured on the RetroArch CRT-shader output at 1920x1080
   # (use show_regions.py to check them against a frame).
   score_regions:

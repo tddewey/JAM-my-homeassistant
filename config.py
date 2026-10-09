@@ -37,6 +37,9 @@ class VideoConfig:
     # capture size on load. None means the regions already match the capture size.
     reference_width: Optional[int] = None
     reference_height: Optional[int] = None
+    # Capture rate requested from the card; frames are only processed every frame_interval,
+    # so a low rate saves the YUYV->BGR conversion work
+    fps: Optional[int] = None
 
 
 @dataclass
@@ -49,6 +52,9 @@ class DetectionConfig:
     team_selection_heading_region: Optional[TextRegion] = None
     # Plain stretch of the purple overlay band (no text) used by the purple gate
     purple_band_region: Optional[TextRegion] = None
+    # Learned glyph/phrase templates and full-screen scene references
+    templates_path: str = "templates/nbajam.npz"
+    scenes_path: str = "templates/scenes.npz"
 
 
 @dataclass
@@ -131,7 +137,8 @@ class Config:
             use_grayscale=video_data.get('use_grayscale', True),
             fourcc=video_data.get('fourcc', 'YUYV'),
             reference_width=video_data.get('reference_width'),
-            reference_height=video_data.get('reference_height')
+            reference_height=video_data.get('reference_height'),
+            fps=video_data.get('fps')
         )
 
         # Load detection config
@@ -183,7 +190,9 @@ class Config:
             confidence_threshold=detection_data.get('confidence_threshold', 0.7),
             quarter_text_region=quarter_text_region,
             team_selection_heading_region=team_selection_heading_region,
-            purple_band_region=purple_band_region
+            purple_band_region=purple_band_region,
+            templates_path=detection_data.get('templates_path', 'templates/nbajam.npz'),
+            scenes_path=detection_data.get('scenes_path', 'templates/scenes.npz')
         )
         _scale_regions(detection_config, video_config)
 
