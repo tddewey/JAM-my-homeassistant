@@ -29,7 +29,7 @@ SCENE_SPECS: Dict[str, Tuple[str, Tuple[slice, slice]]] = {
     'half_stats': ('half_stats', TITLE),
 }
 
-MIN_CORRELATION = 0.8
+MIN_CORRELATION = 0.85
 BLACK_MEAN = 5.0          # whole-frame mean gray below this is the black transition
 LIVE_COURT_MEAN = 30.0    # lower-frame mean gray above this means gameplay is visible
 WIN_FRACTION = 0.18       # share of magenta pixels in the upper-middle for "X WINS!"

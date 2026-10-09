@@ -10,7 +10,7 @@ Observations per frame:
            purple overlay is not on screen
 
 Debouncing is by consecutive frames, not seconds, so it is independent of the capture
-interval: at 4 frames/s, 3 agreeing frames confirm a score in about 0.75 s.
+interval: at 6-7 frames/s, 2 agreeing frames confirm a score in about 0.3 s.
 """
 
 from dataclasses import dataclass, field
@@ -41,9 +41,9 @@ STATUS_RANK = {NOT_PLAYING: 0, TEAM_SELECT: 0, STARTING: 0, TIPOFF: 0,
 # Scenes that mean the game is definitively over
 GAME_OVER_SCENES = {'final_stats', 'final_score', 'game_over', 'win'}
 
-SCORE_CONFIRM_VOTES = 3       # plausible readings of one value needed to confirm a score
+SCORE_CONFIRM_VOTES = 2       # plausible readings of one value needed to confirm a score
 BANNER_CONFIRM_VOTES = 3
-SCENE_CONFIRM_FRAMES = 2      # consecutive frames; 'win' only needs 1: it blinks and is unmistakable
+SCENE_CONFIRM_FRAMES = 1      # consecutive frames; scene matches are either ~1.0 or below 0.8, so one is enough
 MAX_PLAUSIBLE_JUMP = 6        # most points one player can gain between observed readings
 APPEARANCE_GAP_FRAMES = 4     # overlay absent this long => the next overlay is a new appearance
 MAX_SCORE = 199               # first reading mid-game: anything up to this is believable
