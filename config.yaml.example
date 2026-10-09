@@ -38,15 +38,16 @@ detection:
   quarter_text_region:
     x: 470
     y: 965
-    width: 310
+    width: 470
     height: 65
 
-  # Plain stretch of the purple overlay band between the quarter text and the
-  # "TOURNAMENT EDITION" logo. Its purple fraction gates all OCR work.
+  # Plain stretch of the purple overlay band to the right of the clock. Its purple
+  # fraction gates all OCR work. (The stretch between the quarter text and the
+  # "TOURNAMENT EDITION" logo is NOT safe: "END OF 4TH QUARTER" runs over it.)
   purple_band_region:
-    x: 790
+    x: 1385
     y: 990
-    width: 200
+    width: 170
     height: 25
 
   # Team selection heading region has not been measured at 1080p yet.

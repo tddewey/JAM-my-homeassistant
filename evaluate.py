@@ -30,7 +30,8 @@ from detectors.game_quarter_detector import GameQuarterDetector
 from detectors.score_detector import ScoreDetector
 from detectors.template_matcher import TemplateLibrary, TemplateRecognizer
 
-PHRASES = ["1ST QUARTER", "2ND QUARTER", "3RD QUARTER", "4TH QUARTER", "HALFTIME", "FINAL"]
+PHRASES = ["1ST QUARTER", "2ND QUARTER", "3RD QUARTER", "4TH QUARTER", "HALFTIME", "FINAL",
+           "END OF 1ST QUARTER", "END OF 3RD QUARTER", "END OF 4TH QUARTER"]
 DIGIT_CFG = '--psm 8 -c tessedit_char_whitelist=0123456789'
 TEXT_CFG = '--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
