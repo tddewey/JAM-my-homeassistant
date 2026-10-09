@@ -87,7 +87,10 @@ class NBAJamDetector:
         if self.recognizer.base.has_purple_band(frame):
             reading = self.recognizer.read(frame)
         if self.debug:
-            self.log(f"  scene={scene} reading={reading} status={self.tracker.status}", Fore.CYAN)
+            observed = (scene, reading)
+            if observed != getattr(self, '_last_observed', None):    # only log changes
+                self._last_observed = observed
+                self.log(f"  saw scene={scene} overlay={reading}", Fore.BLUE)
         events = self.tracker.update(scene, reading)
         for event in events:
             self.handle_event(event)
