@@ -10,6 +10,7 @@ Labels CSV columns: frame,overlay,p1,p2,quarter
 Recognizers:
   legacy   the existing ScoreDetector / GameQuarterDetector, unchanged
   mask     scanline-bridged glyph mask + Tesseract (see BaseOCRDetector.text_mask)
+  template glyph/phrase template matching (needs --templates from build_templates.py)
 
 Usage: python evaluate.py --labels dataset/labels_test.csv [--recognizer legacy mask]
 """
@@ -27,6 +28,7 @@ from config import Config
 from detectors.base_ocr_detector import BaseOCRDetector
 from detectors.game_quarter_detector import GameQuarterDetector
 from detectors.score_detector import ScoreDetector
+from detectors.template_matcher import TemplateLibrary, TemplateRecognizer
 
 PHRASES = ["1ST QUARTER", "2ND QUARTER", "3RD QUARTER", "4TH QUARTER", "HALFTIME", "FINAL"]
 DIGIT_CFG = '--psm 8 -c tessedit_char_whitelist=0123456789'
@@ -104,8 +106,13 @@ def main():
     parser.add_argument('--labels', required=True)
     parser.add_argument('--root', default=None, help='Directory frame paths are relative to (default: labels file dir)')
     parser.add_argument('--config', default='config.yaml')
-    parser.add_argument('--recognizer', nargs='+', default=['legacy', 'mask'], choices=['legacy', 'mask'])
+    parser.add_argument('--recognizer', nargs='+', default=['legacy', 'mask'], choices=['legacy', 'mask', 'template'])
+    parser.add_argument('--templates', default=None, help='Template library .npz for the template recognizer')
+    parser.add_argument('--min-time', type=float, default=None, help='Only evaluate frames at/after this elapsed second')
+    parser.add_argument('--max-time', type=float, default=None, help='Only evaluate frames before this elapsed second')
     parser.add_argument('--errors', action='store_true', help='List every wrong prediction')
+    parser.add_argument('--split', choices=['even', 'odd'], default=None,
+                        help='Only evaluate frames whose 20-second time bucket is even/odd')
     args = parser.parse_args()
 
     labels_path = Path(args.labels)
@@ -113,9 +120,22 @@ def main():
     det_cfg = Config.load(args.config).detection
     gate = BaseOCRDetector(det_cfg)
     classes = {'legacy': LegacyRecognizer, 'mask': MaskRecognizer}
+    if 'template' in args.recognizer:
+        if not args.templates:
+            raise SystemExit("--templates is required for the template recognizer")
+        library = TemplateLibrary.load(args.templates)
+        classes['template'] = lambda cfg: TemplateRecognizer(cfg, library)
 
     with open(labels_path, newline='') as f:
         rows = list(csv.DictReader(f))
+    t = lambda r: float(Path(r['frame']).stem)
+    if args.min_time is not None:
+        rows = [r for r in rows if t(r) >= args.min_time]
+    if args.max_time is not None:
+        rows = [r for r in rows if t(r) < args.max_time]
+    if args.split:
+        want = 0 if args.split == 'even' else 1
+        rows = [r for r in rows if int(t(r) // 20) % 2 == want]
     print(f"{len(rows)} labeled frames from {labels_path}")
 
     def load(row):
@@ -141,6 +161,7 @@ def main():
     overlay_rows = [r for r in rows if r['overlay'].strip() == '1']
     for name in args.recognizer:
         rec = classes[name](det_cfg)
+        rec.name = name
         hits = {'p1': 0, 'p2': 0, 'quarter': 0}
         errors = []
         start = time.time()
