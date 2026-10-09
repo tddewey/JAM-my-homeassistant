@@ -5,6 +5,12 @@ import numpy as np
 from typing import Optional, Union
 from config import DetectionConfig, ScoreRegion, TextRegion
 
+# HSV range (OpenCV scale: H 0-179) of the overlay band under the CRT shader,
+# measured on 1080p captures: H 135-145, S 90-160, V 85-240.
+PURPLE_HSV_LOW = np.array([128, 60, 70], dtype=np.uint8)
+PURPLE_HSV_HIGH = np.array([152, 255, 255], dtype=np.uint8)
+PURPLE_RATIO_THRESHOLD = 0.5
+
 
 class BaseOCRDetector:
     """Base class with shared OCR utilities for score and quarter detection."""
@@ -58,58 +64,73 @@ class BaseOCRDetector:
         
         return roi
 
+    def purple_ratio(self, frame: np.ndarray) -> Optional[float]:
+        """Fraction of the purple-band region that is purple (None if unavailable).
+
+        Uses the dedicated purple_band_region (a plain stretch of the band) when
+        configured, otherwise the quarter text region. Purple is matched in HSV
+        because the shader-lit band is desaturated lavender, not saturated BGR purple.
+        """
+        region = self.config.purple_band_region or self.config.quarter_text_region
+        if region is None or frame is None or len(frame.shape) != 3:
+            return None
+        h, w = frame.shape[:2]
+        x1, y1 = max(0, region.x), max(0, region.y)
+        x2, y2 = min(w, region.x + region.width), min(h, region.y + region.height)
+        if x2 <= x1 or y2 <= y1:
+            return None
+        hsv = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, PURPLE_HSV_LOW, PURPLE_HSV_HIGH)
+        return float(np.count_nonzero(mask)) / mask.size
+
     def has_purple_band(self, frame: np.ndarray) -> bool:
-        """Check if purple band is present in quarter text region.
-        
+        """Check if the purple score/quarter overlay band is on screen.
+
         Args:
             frame: Full video frame (must be color/BGR, not grayscale)
-            
+
         Returns:
             True if purple band detected, False otherwise
         """
-        if self.config.quarter_text_region is None:
-            if self.debug:
-                print("  Purple check: No quarter_text_region configured")
-            return False
-        
-        # Extract region from color frame (don't convert to grayscale)
-        h, w = frame.shape[:2]
-        region = self.config.quarter_text_region
-        x1 = max(0, region.x)
-        y1 = max(0, region.y)
-        x2 = min(w, region.x + region.width)
-        y2 = min(h, region.y + region.height)
-        
-        if x2 <= x1 or y2 <= y1:
-            if self.debug:
-                print(f"  Purple check: Invalid region bounds ({x1},{y1}) to ({x2},{y2})")
-            return False
-        
-        roi = frame[y1:y2, x1:x2]
-        if roi.size == 0 or len(roi.shape) != 3:
-            if self.debug:
-                print(f"  Purple check: Invalid ROI (size={roi.size}, shape={roi.shape if roi.size > 0 else 'empty'})")
-            return False
-        
-        # Purple in BGR: B and R are high, G is low
-        # Typical purple: B=100-220, G=0-80, R=100-220
-        # Check if significant portion of region is purple
-        purple_mask = (
-            (roi[:, :, 0] >= 100) & (roi[:, :, 0] <= 220) &  # B channel
-            (roi[:, :, 1] >= 0) & (roi[:, :, 1] <= 80) &     # G channel (low)
-            (roi[:, :, 2] >= 100) & (roi[:, :, 2] <= 220)    # R channel
-        )
-        
-        purple_ratio = np.sum(purple_mask) / roi.size
-        
+        ratio = self.purple_ratio(frame)
         if self.debug:
-            b_mean = np.mean(roi[:, :, 0])
-            g_mean = np.mean(roi[:, :, 1])
-            r_mean = np.mean(roi[:, :, 2])
-            print(f"  Purple check: {np.sum(purple_mask)}/{roi.size} pixels match ({purple_ratio*100:.1f}%), threshold=8%")
-            print(f"  Purple check: Result={purple_ratio > 0.08}")
-        
-        return purple_ratio > 0.08  # At least 8% of region is purple
+            print(f"  Purple check: ratio={'n/a' if ratio is None else f'{ratio*100:.1f}%'}, "
+                  f"threshold={PURPLE_RATIO_THRESHOLD*100:.0f}%")
+        return ratio is not None and ratio > PURPLE_RATIO_THRESHOLD
+
+    def text_mask(self, color_region: np.ndarray, min_area: int = 150) -> Optional[np.ndarray]:
+        """Isolate the overlay's white (or red, just-scored) glyph pixels.
+
+        The CRT shader cuts every glyph into scanline stripes, so the mask is
+        closed vertically to bridge them, and small specks are discarded.
+
+        Args:
+            color_region: BGR region
+            min_area: Smallest connected component (pixels) to keep
+
+        Returns:
+            Binary mask (255 = glyph), or None if the region is invalid
+        """
+        if color_region is None or color_region.size == 0 or len(color_region.shape) != 3:
+            return None
+        white = color_region.min(axis=2) > 165
+        red = (color_region[:, :, 2] > 150) & (color_region[:, :, 1] < 100) & (color_region[:, :, 0] < 100)
+        mask = (white | red).astype(np.uint8) * 255
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (1, 7)))
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        keep = np.zeros_like(mask)
+        for i in range(1, count):
+            if stats[i, cv2.CC_STAT_AREA] >= min_area:
+                keep[labels == i] = 255
+        return keep
+
+    def mask_to_ocr_image(self, mask: np.ndarray, scale: int = 2, border: int = 20) -> np.ndarray:
+        """Turn a glyph mask into a dark-on-light, upscaled, bordered image for Tesseract."""
+        img = cv2.resize(mask, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        img = cv2.GaussianBlur(img, (0, 0), 1.0)
+        _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+        return cv2.copyMakeBorder(255 - img, border, border, border, border,
+                                  cv2.BORDER_CONSTANT, value=255)
 
     def preprocess_for_ocr(self, region: np.ndarray, strategy: int = 0) -> Optional[np.ndarray]:
         """Preprocess image region for better OCR with multiple strategies.

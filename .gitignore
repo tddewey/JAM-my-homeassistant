@@ -56,3 +56,4 @@ htmlcov/
 *.bak
 *.cache
 
+dataset/

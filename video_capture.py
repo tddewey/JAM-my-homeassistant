@@ -2,6 +2,7 @@
 
 import cv2
 import numpy as np
+import threading
 import time
 from typing import Optional, Tuple, Dict
 from config import VideoConfig
@@ -22,6 +23,21 @@ class VideoCapture:
         self.last_frame: Optional[np.ndarray] = None
         self.last_frame_gray: Optional[np.ndarray] = None
         self.codec_info: Optional[Dict[str, str]] = None
+        # A background thread drains the driver's buffer so reads are never stale
+        self._latest: Optional[np.ndarray] = None
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def _grab_loop(self):
+        """Continuously read frames, keeping only the newest."""
+        while not self._stop.is_set():
+            ret, frame = self.cap.read()
+            if ret:
+                with self._lock:
+                    self._latest = frame
+            else:
+                time.sleep(0.01)
 
     def open(self) -> bool:
         """Open video capture device.
@@ -35,12 +51,25 @@ class VideoCapture:
                 print(f"Error: Could not open video device {self.config.device_path}")
                 return False
             
-            # Set resolution from config
+            # Request pixel format first, then resolution
+            if self.config.fourcc:
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self.config.fourcc))
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.capture_width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.capture_height)
             
             # Detect codec
             self.codec_info = self.get_codec_info()
+
+            actual_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            if (actual_w, actual_h) != (self.config.capture_width, self.config.capture_height):
+                print(f"Warning: requested {self.config.capture_width}x{self.config.capture_height} "
+                      f"but device is delivering {actual_w}x{actual_h}; configured regions will not line up")
+
+            self._stop.clear()
+            self._thread = threading.Thread(target=self._grab_loop, daemon=True)
+            self._thread.start()
             
             print(f"Video capture opened: {self.config.device_path}")
             print(f"  Resolution: {self.config.capture_width}x{self.config.capture_height}")
@@ -68,8 +97,9 @@ class VideoCapture:
 
         # Only read frame if enough time has passed
         if time_since_last >= self.config.frame_interval:
-            ret, frame = self.cap.read()
-            if ret:
+            with self._lock:
+                frame = self._latest
+            if frame is not None:
                 self.last_frame = frame
                 # Convert to grayscale if enabled
                 if self.config.use_grayscale:
@@ -79,7 +109,6 @@ class VideoCapture:
                 self.last_frame_time = current_time
                 return (frame, current_time)
             else:
-                print("Warning: Failed to read frame from video device")
                 return None
 
         # Return cached frame if available
@@ -127,11 +156,11 @@ class VideoCapture:
             
             # Map FourCC to human-readable names
             codec_map = {
-                'MJPG': ('MJPEG', 'Compressed, moderate CPU for decoding. Good for Pi Zero.'),
-                'YUYV': ('YUYV 4:2:2', 'Uncompressed, high bandwidth but fast processing. Best for Pi Zero.'),
+                'MJPG': ('MJPEG', 'Compressed, moderate CPU for decoding.'),
+                'YUYV': ('YUYV 4:2:2', 'Uncompressed, high bandwidth but fast processing.'),
                 'YU12': ('YUV 4:2:0', 'Uncompressed YUV format. Good for processing.'),
                 'YV12': ('YV12', 'Uncompressed YVU format. Good for processing.'),
-                'H264': ('H.264', 'Highly compressed, may require hardware decoding. May be CPU-intensive on Pi Zero.'),
+                'H264': ('H.264', 'Highly compressed, may require hardware decoding.'),
                 'X264': ('x264', 'H.264 variant, may require hardware decoding.'),
                 'I420': ('I420', 'YUV 4:2:0 planar. Good for processing.'),
             }
@@ -149,6 +178,10 @@ class VideoCapture:
 
     def release(self):
         """Release video capture device."""
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+            self._thread = None
         if self.cap is not None:
             self.cap.release()
             self.cap = None

@@ -32,6 +32,11 @@ class VideoConfig:
     capture_width: int
     capture_height: int
     use_grayscale: bool
+    fourcc: str = "YUYV"
+    # Resolution the config regions were measured at; regions are scaled to the
+    # capture size on load. None means the regions already match the capture size.
+    reference_width: Optional[int] = None
+    reference_height: Optional[int] = None
 
 
 @dataclass
@@ -42,6 +47,8 @@ class DetectionConfig:
     confidence_threshold: float
     quarter_text_region: Optional[TextRegion] = None
     team_selection_heading_region: Optional[TextRegion] = None
+    # Plain stretch of the purple overlay band (no text) used by the purple gate
+    purple_band_region: Optional[TextRegion] = None
 
 
 @dataclass
@@ -69,6 +76,28 @@ class ScreenshotConfig:
     directory: str
     max_count: int  # Maximum number of screenshots to keep
     max_age_days: int  # Maximum age in days before deletion
+
+
+def _scale_regions(detection: DetectionConfig, video: VideoConfig) -> None:
+    """Scale every region from the reference resolution to the capture resolution."""
+    ref_w = video.reference_width or video.capture_width
+    ref_h = video.reference_height or video.capture_height
+    sx = video.capture_width / ref_w
+    sy = video.capture_height / ref_h
+    if sx == 1 and sy == 1:
+        return
+
+    def scale(r):
+        if r is None:
+            return
+        r.x, r.width = round(r.x * sx), round(r.width * sx)
+        r.y, r.height = round(r.y * sy), round(r.height * sy)
+
+    for r in detection.score_regions.values():
+        scale(r)
+    scale(detection.quarter_text_region)
+    scale(detection.team_selection_heading_region)
+    scale(detection.purple_band_region)
 
 
 @dataclass
@@ -99,7 +128,10 @@ class Config:
             frame_interval=video_data.get('frame_interval', 1.0),
             capture_width=video_data.get('capture_width', 1920),
             capture_height=video_data.get('capture_height', 1080),
-            use_grayscale=video_data.get('use_grayscale', True)
+            use_grayscale=video_data.get('use_grayscale', True),
+            fourcc=video_data.get('fourcc', 'YUYV'),
+            reference_width=video_data.get('reference_width'),
+            reference_height=video_data.get('reference_height')
         )
 
         # Load detection config
@@ -135,13 +167,25 @@ class Config:
                 height=team_selection_heading_data.get('height', 0)
             )
         
+        purple_band_data = detection_data.get('purple_band_region')
+        purple_band_region = None
+        if purple_band_data:
+            purple_band_region = TextRegion(
+                x=purple_band_data.get('x', 0),
+                y=purple_band_data.get('y', 0),
+                width=purple_band_data.get('width', 0),
+                height=purple_band_data.get('height', 0)
+            )
+
         detection_config = DetectionConfig(
             score_regions=score_regions,
             motion_threshold=detection_data.get('motion_threshold', 0.1),
             confidence_threshold=detection_data.get('confidence_threshold', 0.7),
             quarter_text_region=quarter_text_region,
-            team_selection_heading_region=team_selection_heading_region
+            team_selection_heading_region=team_selection_heading_region,
+            purple_band_region=purple_band_region
         )
+        _scale_regions(detection_config, video_config)
 
         # Load MQTT config
         mqtt_data = data.get('mqtt', {})

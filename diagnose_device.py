@@ -23,11 +23,11 @@ def get_codec_info(cap: cv2.VideoCapture) -> Optional[Dict[str, str]]:
         
         # Map FourCC to human-readable names
         codec_map = {
-            'MJPG': ('MJPEG', 'Compressed, moderate CPU for decoding. Good for Pi Zero.'),
-            'YUYV': ('YUYV 4:2:2', 'Uncompressed, high bandwidth but fast processing. Best for Pi Zero.'),
+            'MJPG': ('MJPEG', 'Compressed, moderate CPU for decoding.'),
+            'YUYV': ('YUYV 4:2:2', 'Uncompressed, high bandwidth but fast processing.'),
             'YU12': ('YUV 4:2:0', 'Uncompressed YUV format. Good for processing.'),
             'YV12': ('YV12', 'Uncompressed YVU format. Good for processing.'),
-            'H264': ('H.264', 'Highly compressed, may require hardware decoding. May be CPU-intensive on Pi Zero.'),
+            'H264': ('H.264', 'Highly compressed, may require hardware decoding.'),
             'X264': ('x264', 'H.264 variant, may require hardware decoding.'),
             'I420': ('I420', 'YUV 4:2:0 planar. Good for processing.'),
         }
@@ -117,12 +117,12 @@ def main():
     if codec_info:
         codec = codec_info['fourcc']
         if codec == 'H264' or codec == 'X264':
-            print("  ⚠️  H.264 codec detected - may be CPU-intensive on Pi Zero W2")
+            print("  ⚠️  H.264 codec detected - may be CPU-intensive")
             print("     Consider a capture device that supports MJPEG or YUYV")
         elif codec == 'MJPG':
-            print("  ✓ MJPEG codec - good balance for Pi Zero W2")
+            print("  ✓ MJPEG codec - good balance")
         elif codec == 'YUYV':
-            print("  ✓ YUYV codec - excellent for Pi Zero W2 (fastest processing)")
+            print("  ✓ YUYV codec - excellent (fastest processing)")
         else:
             print(f"  Codec {codec} - performance impact unknown")
     else:

@@ -3,48 +3,62 @@
 video:
   # Path to video capture device (typically /dev/video0 or /dev/video1)
   device_path: /dev/video0
-  # Interval between frame captures in seconds (lower = more CPU usage)
+  # Interval between frame captures in seconds
   frame_interval: 0.5
-  # Capture resolution (lower = faster processing, less CPU)
-  capture_width: 640    # Reduced from 1920 for better performance
-  capture_height: 480     # Reduced from 1080 for better performance
+  # Capture resolution
+  capture_width: 1920
+  capture_height: 1080
+  # Resolution the detection regions below were measured at. Regions are scaled
+  # to the capture size, so changing capture_width/height does not break them.
+  # Omit to treat the regions as already being in capture pixels.
+  reference_width: 1920
+  reference_height: 1080
   # Early grayscale conversion (reduces memory and processing)
   use_grayscale: true
+  # Pixel format requested from the capture card. YUYV is uncompressed (no JPEG
+  # artifacts, best for template matching); MJPG uses less USB bandwidth.
+  fourcc: YUYV
 
 detection:
-  # Screen regions for score detection (coordinates in pixels)
-  # Adjust these based on your capture resolution and screen layout
+  # Regions measured on the RetroArch CRT-shader output at 1920x1080
+  # (use show_regions.py to check them against a frame).
   score_regions:
     player1:
-      x: 460      # Left edge of score region
-      y: 348       # Top edge of score region
-      width: 125   # Width of score region
-      height: 40  # Height of score region
+      x: 1300      # Wide enough for 3-digit scores (right-aligned digits)
+      y: 770
+      width: 170
+      height: 90
     player2:
-      x: 460
-      y: 381
-      width: 125
-      height: 40
-  
-  # Region where quarter/period text appears (e.g., "1st quarter", "halftime", "final")
-  # This text appears when scores update, quarters begin, or quarters end
+      x: 1300
+      y: 860
+      width: 170
+      height: 95
+
+  # Region where quarter/period text appears ("1ST QUARTER", "HALFTIME", "FINAL")
   quarter_text_region:
-    x: 90        # Left edge of quarter text region
-    y: 426        # Top edge of quarter text region
-    width: 245     # Width of quarter text region
-    height: 36     # Height of quarter text region
-  
-  # Region for team selection heading text
-  # Used to distinguish pre-game ("PRESS SHOOT TO SELECT") vs halftime ("SUBSTITUTIONS")
-  team_selection_heading_region:
-    x: 120        # Left edge of heading region
-    y: 11         # Top edge of heading region
-    width: 404     # Width of heading region
-    height: 44     # Height of heading region
-  
+    x: 470
+    y: 965
+    width: 310
+    height: 65
+
+  # Plain stretch of the purple overlay band between the quarter text and the
+  # "TOURNAMENT EDITION" logo. Its purple fraction gates all OCR work.
+  purple_band_region:
+    x: 790
+    y: 990
+    width: 200
+    height: 25
+
+  # Team selection heading region has not been measured at 1080p yet.
+  # team_selection_heading_region:
+  #   x: 0
+  #   y: 0
+  #   width: 0
+  #   height: 0
+
   # Motion detection threshold (0.0 to 1.0, lower = more sensitive)
   motion_threshold: 0.1
-  
+
   # Minimum confidence for score detection (0.0 to 1.0)
   confidence_threshold: 0.7
 

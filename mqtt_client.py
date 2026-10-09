@@ -94,7 +94,7 @@ class MQTTClient:
         device_info = {
             "identifiers": [f"{self.config.topic_prefix}_detector"],
             "name": "NBA Jam Detector",
-            "model": "Raspberry Pi Zero W2",
+            "model": "Dell OptiPlex 7060",
             "manufacturer": "Custom"
         }
 
