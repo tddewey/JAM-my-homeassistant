@@ -20,6 +20,7 @@ PICKS = {
     'game_over': ('game2', 560.1),
     'substitutions': ('game1', 335),
     'half_stats': ('game1', 317),
+    'get_ready': ('game3', 184.1),       # "GET READY FOR 2ND QUARTER"
 }
 
 

@@ -74,6 +74,9 @@ class NBAJamDetector:
                 self.log(f"Score: {event.player1} - {event.player2}", Fore.GREEN)
                 self.mqtt_client.publish_score('player1', event.player1)
                 self.mqtt_client.publish_score('player2', event.player2)
+        elif event.kind == 'appearance':
+            if self.debug:
+                self.log(f"  {event.detail}", Fore.BLUE)
         elif event.kind == 'score':
             self.log(f"Player {event.scorer} scored {event.points} "
                      f"({event.player1}-{event.player2}, {event.quarter})", Fore.GREEN)

@@ -82,6 +82,45 @@ class TrackerTest(unittest.TestCase):
         events = overlay(t, 2, 3, '1ST QUARTER')
         self.assertEqual([(e.scorer, e.points) for e in kinds(events, 'score')], [(2, 3)])
 
+    def test_play_resumes_after_get_ready_board(self):
+        t = GameTracker()
+        start_game(t)
+        overlay(t, 2, 0, '1ST QUARTER')
+        overlay(t, 2, 0, 'END OF 1ST QUARTER')
+        self.assertEqual(t.status, 'q1')
+        for scene in ['live', 'None', 'get_ready', 'get_ready', 'get_ready']:
+            self.assertEqual(kinds(t.update(None if scene == 'None' else scene, None), 'status'), [])
+        self.assertEqual(t.status, 'q1')                  # still on the board
+        self.assertEqual([e.status for e in kinds(t.update('live', None), 'status')], ['q2'])
+        overlay(t, 4, 0, '2ND QUARTER')
+        self.assertEqual(t.status, 'q2')
+
+    def test_missed_halftime_banner_is_recovered(self):
+        t = GameTracker()
+        start_game(t)
+        overlay(t, 2, 0, '1ST QUARTER')
+        overlay(t, 4, 0, '2ND QUARTER')
+        self.assertEqual([e.status for e in kinds(t.update('half_stats', None), 'status')], ['halftime'])
+        for scene in ['substitutions', 'get_ready', 'live']:
+            t.update(scene, None)
+        self.assertEqual(t.status, 'q3')
+
+    def test_each_break_advances_one_period(self):
+        t = GameTracker()
+        start_game(t)
+        overlay(t, 2, 0, '1ST QUARTER')
+        seen = []
+        for _ in range(5):                                # breaks after q1, halftime, q3, q4, overtime
+            t.update('get_ready', None)
+            seen += [e.status for e in kinds(t.update('live', None), 'status')]
+        self.assertEqual(seen, ['q2', 'q3', 'q4', 'overtime'])
+
+    def test_get_ready_before_tipoff_is_ignored(self):
+        t = GameTracker()
+        for scene in ['matchup', 'matchup', 'get_ready', 'live']:
+            t.update(scene, None)
+        self.assertEqual(t.status, 'starting')
+
     def test_game_over_then_new_game(self):
         t = GameTracker()
         start_game(t)

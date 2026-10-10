@@ -46,6 +46,10 @@ BANNER_RANK = {
     'OVERTIME': 6, 'DOUBLE OVERTIME': 7, 'TRIPLE OVERTIME': 8, 'FINAL': 9,
 }
 
+# Where play goes after the "GET READY FOR ..." board that precedes every period. Keyed by
+# the current status, so it still works when a banner (e.g. HALFTIME) was missed.
+NEXT_PERIOD = {'q1': 'q2', 'q2': 'q3', HALFTIME: 'q3', 'q3': 'q4', 'q4': OVERTIME, OVERTIME: OVERTIME}
+
 # Scenes that mean the game is definitively over
 GAME_OVER_SCENES = {'final_stats', 'final_score', 'game_over', 'win'}
 
@@ -63,7 +67,8 @@ STALE_OVERLAY_FRAMES = 4000   # no overlay for this long mid-game => assume the 
 
 @dataclass
 class Event:
-    """Something to publish. kind is one of: status, banner, scores, score."""
+    """Something to publish. kind is one of: status, banner, scores, score (and appearance, a
+    diagnostic summary of each overlay appearance that is only logged)."""
     kind: str
     status: Optional[str] = None
     banner: Optional[str] = None
@@ -72,6 +77,7 @@ class Event:
     scorer: Optional[int] = None      # 1 or 2, for kind == 'score'
     points: Optional[int] = None      # points gained, for kind == 'score'
     quarter: Optional[str] = None     # status at the time, for kind == 'score'
+    detail: Optional[str] = None      # diagnostics, for kind == 'appearance'
 
 
 @dataclass
@@ -81,12 +87,14 @@ class GameTracker:
     player1: Optional[int] = None
     player2: Optional[int] = None
 
+    _awaiting_play: bool = False      # the get-ready board was seen; the next live frame starts the period
     _scene: Optional[str] = None
     _scene_run: int = 0
     _saw_black: bool = False
     _black_run: int = 0
     _votes: Dict[int, Dict[int, int]] = field(default_factory=lambda: {1: {}, 2: {}})
     _banner_votes: Dict[str, int] = field(default_factory=dict)
+    _seen_banners: Dict[str, int] = field(default_factory=dict)     # every banner read this appearance, accepted or not
     _back_votes: Dict[str, int] = field(default_factory=dict)       # lower-ranked banner reads this appearance
     _below_votes: Dict[int, Dict[int, int]] = field(default_factory=lambda: {1: {}, 2: {}})
     _frames_since_overlay: int = 0
@@ -130,6 +138,13 @@ class GameTracker:
             self._new_game(TEAM_SELECT)
         elif scene == 'matchup' and self.status != STARTING:
             self._new_game(STARTING)
+        elif scene == 'get_ready' and self.status in NEXT_PERIOD:
+            self._awaiting_play = True
+        elif scene == 'half_stats' and self.status in ('q1', 'q2'):
+            self._set_status(HALFTIME)      # backup for a missed HALFTIME banner
+        elif scene == 'live' and self._awaiting_play:
+            self._awaiting_play = False
+            self._set_status(NEXT_PERIOD[self.status])
         elif scene == 'live' and self.status == STARTING and self._saw_black:
             self._set_status(TIPOFF)
             self._set_scores(0, 0)
@@ -141,6 +156,7 @@ class GameTracker:
 
     def _new_game(self, status: str) -> None:
         self._saw_black = False
+        self._awaiting_play = False
         self.banner = None
         self._set_status(status)
         self.player1 = self.player2 = None
@@ -150,12 +166,19 @@ class GameTracker:
 
     # ---- overlay ----
     def _reset_votes(self) -> None:
+        if self._seen_banners:
+            reads = ', '.join(f"{b}x{n}" for b, n in sorted(self._seen_banners.items(), key=lambda kv: -kv[1]))
+            self.events.append(Event('appearance', detail=f"overlay ended: banner reads {reads}; "
+                                     f"status={self.status} banner={self.banner} "
+                                     f"score={self.player1}-{self.player2}"))
+        self._seen_banners = {}
         self._votes = {1: {}, 2: {}}
         self._banner_votes = {}
         self._back_votes = {}
         self._below_votes = {1: {}, 2: {}}
 
     def _update_overlay(self, p1: Optional[int], p2: Optional[int], banner: Optional[str]) -> None:
+        self._seen_banners[str(banner)] = self._seen_banners.get(str(banner), 0) + 1
         # Banner: plurality vote within the appearance. Applied before the scores so the
         # status is already right when a score event fires on the same frame.
         if banner is not None and self._banner_plausible(banner):

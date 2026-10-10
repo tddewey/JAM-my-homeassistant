@@ -14,6 +14,10 @@ SCENE_SIZE = (480, 270)
 # Regions on the 480x270 frame: (rows, cols)
 TITLE = (slice(4, 34), slice(150, 330))
 CENTER = (slice(90, 200), slice(150, 330))
+# "GET READY FOR ..." in the first column of the wooden 1-2-3-4 board shown before every
+# quarter and overtime. Only the constant first two text lines are used (the quarter name
+# below them changes, and team select / "CONTINUE?" use the same board with other text).
+GET_READY = (slice(72, 106), slice(65, 150))
 
 # prototype name -> (scene label, region). The title blinks between "PRESS SHOOT TO
 # SELECT" and "PRESS TURBO TO SWAP", so team select has two prototypes.
@@ -24,6 +28,7 @@ SCENE_SPECS: Dict[str, Tuple[str, Tuple[slice, slice]]] = {
     'final_stats': ('final_stats', TITLE),
     'final_score': ('final_score', TITLE),
     'game_over': ('game_over', CENTER),
+    'get_ready': ('get_ready', GET_READY),
     # Look-alikes that must NOT be mistaken for the scenes above
     'substitutions': ('substitutions', TITLE),
     'half_stats': ('half_stats', TITLE),
@@ -76,7 +81,7 @@ class SceneDetector:
         """Return the scene label for a full-size BGR frame.
 
         Labels: team_select, matchup, final_stats, final_score, game_over,
-        substitutions, half_stats (title screens), win (X WINS! graphic),
+        get_ready (before each quarter), substitutions, half_stats (title screens), win (X WINS! graphic),
         black (transition), live (gameplay visible), or None.
         """
         small, gray = _gray_small(frame)
