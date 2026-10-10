@@ -11,7 +11,7 @@ from config import MQTTConfig
 # Every value game_status can take (also the enum options HA shows)
 STATUS_OPTIONS = [
     "not_playing", "team_select", "starting", "tipoff",
-    "q1", "q2", "halftime", "q3", "q4", "game_over",
+    "q1", "q2", "halftime", "q3", "q4", "overtime", "game_over",
 ]
 
 

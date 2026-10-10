@@ -26,7 +26,7 @@ init(autoreset=True)
 STATUS_COLORS = {
     'not_playing': "", 'team_select': Fore.CYAN, 'starting': Fore.CYAN, 'tipoff': Fore.GREEN,
     'q1': Fore.GREEN, 'q2': Fore.GREEN, 'q3': Fore.GREEN, 'q4': Fore.GREEN,
-    'halftime': Fore.YELLOW, 'game_over': Fore.RED,
+    'halftime': Fore.YELLOW, 'overtime': Fore.MAGENTA, 'game_over': Fore.RED,
 }
 
 

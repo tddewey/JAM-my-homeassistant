@@ -21,31 +21,41 @@ TEAM_SELECT = 'team_select'
 STARTING = 'starting'
 TIPOFF = 'tipoff'
 HALFTIME = 'halftime'
+OVERTIME = 'overtime'
 GAME_OVER = 'game_over'
+Q1 = 'q1'      # a score during tipoff can only be the first quarter's
 
 # Overlay banner text -> status. "END OF nTH QUARTER" keeps the quarter's status;
-# the exact text is published separately as the banner.
+# the exact text is published separately as the banner. All overtimes share one status
+# (the banner says which); the game prints TRIPLE OVERTIME for the third and later ones.
 BANNER_STATUS = {
     '1ST QUARTER': 'q1', 'END OF 1ST QUARTER': 'q1',
     '2ND QUARTER': 'q2',
     'HALFTIME': HALFTIME,
     '3RD QUARTER': 'q3', 'END OF 3RD QUARTER': 'q3',
     '4TH QUARTER': 'q4', 'END OF 4TH QUARTER': 'q4',
+    'OVERTIME': OVERTIME, 'DOUBLE OVERTIME': OVERTIME, 'TRIPLE OVERTIME': OVERTIME,
     'FINAL': GAME_OVER,
 }
 
-# A game only moves forward through these; a lower-ranked banner is a misread
-STATUS_RANK = {NOT_PLAYING: 0, TEAM_SELECT: 0, STARTING: 0, TIPOFF: 0,
-               'q1': 1, 'q2': 2, HALFTIME: 3, 'q3': 4, 'q4': 5, GAME_OVER: 6}
+# A game only moves forward through these; a lower-ranked banner is a misread, unless it
+# keeps coming back with scores that went down too, which means the game was restarted
+BANNER_RANK = {
+    '1ST QUARTER': 1, 'END OF 1ST QUARTER': 1, '2ND QUARTER': 2, 'HALFTIME': 3,
+    '3RD QUARTER': 4, 'END OF 3RD QUARTER': 4, '4TH QUARTER': 5, 'END OF 4TH QUARTER': 5,
+    'OVERTIME': 6, 'DOUBLE OVERTIME': 7, 'TRIPLE OVERTIME': 8, 'FINAL': 9,
+}
 
 # Scenes that mean the game is definitively over
 GAME_OVER_SCENES = {'final_stats', 'final_score', 'game_over', 'win'}
 
 SCORE_CONFIRM_VOTES = 2       # plausible readings of one value needed to confirm a score
-BANNER_CONFIRM_VOTES = 3
+BANNER_CONFIRM_VOTES = 2
 SCENE_CONFIRM_FRAMES = 1      # consecutive frames; scene matches are either ~1.0 or below 0.8, so one is enough
 MAX_PLAUSIBLE_JUMP = 6        # most points one player can gain between observed readings
 APPEARANCE_GAP_FRAMES = 4     # overlay absent this long => the next overlay is a new appearance
+RESTART_BANNER_VOTES = 6      # reads of one lower-ranked banner in an overlay appearance that suggest a restart
+RESTART_SCORE_VOTES = 3       # reads of one value below the current score that corroborate it
 MAX_SCORE = 199               # first reading mid-game: anything up to this is believable
 BLACK_TIMEOUT_FRAMES = 40     # sustained black while a game is "on" => signal lost
 STALE_OVERLAY_FRAMES = 4000   # no overlay for this long mid-game => assume the game was abandoned
@@ -77,6 +87,8 @@ class GameTracker:
     _black_run: int = 0
     _votes: Dict[int, Dict[int, int]] = field(default_factory=lambda: {1: {}, 2: {}})
     _banner_votes: Dict[str, int] = field(default_factory=dict)
+    _back_votes: Dict[str, int] = field(default_factory=dict)       # lower-ranked banner reads this appearance
+    _below_votes: Dict[int, Dict[int, int]] = field(default_factory=lambda: {1: {}, 2: {}})
     _frames_since_overlay: int = 0
     events: List[Event] = field(default_factory=list)
 
@@ -94,7 +106,7 @@ class GameTracker:
                 self._reset_votes()
             if (self.status not in (NOT_PLAYING, TEAM_SELECT, STARTING, GAME_OVER)
                     and self._frames_since_overlay > STALE_OVERLAY_FRAMES):
-                self._set_status(NOT_PLAYING)
+                self._new_game(NOT_PLAYING)
         return self.events
 
     # ---- scenes ----
@@ -108,7 +120,7 @@ class GameTracker:
             self._black_run += 1
             self._saw_black = True
             if self._black_run >= BLACK_TIMEOUT_FRAMES and self.status not in (NOT_PLAYING, STARTING, GAME_OVER):
-                self._set_status(NOT_PLAYING)
+                self._new_game(NOT_PLAYING)
         else:
             self._black_run = 0
 
@@ -140,21 +152,34 @@ class GameTracker:
     def _reset_votes(self) -> None:
         self._votes = {1: {}, 2: {}}
         self._banner_votes = {}
+        self._back_votes = {}
+        self._below_votes = {1: {}, 2: {}}
 
     def _update_overlay(self, p1: Optional[int], p2: Optional[int], banner: Optional[str]) -> None:
-        # Banner: plurality vote within the appearance
+        # Banner: plurality vote within the appearance. Applied before the scores so the
+        # status is already right when a score event fires on the same frame.
         if banner is not None and self._banner_plausible(banner):
             self._banner_votes[banner] = self._banner_votes.get(banner, 0) + 1
             if self._banner_votes[banner] >= BANNER_CONFIRM_VOTES and self._is_plurality(self._banner_votes, banner):
                 self._apply_banner(banner)
                 self._banner_votes = {}
+        elif banner in BANNER_RANK and self.status != GAME_OVER:
+            self._back_votes[banner] = self._back_votes.get(banner, 0) + 1
+            if self._restart_suspected(banner):
+                self._restart(banner)
+                return
 
         # Scores: each player votes independently; implausible readings are discarded
         if self.status == GAME_OVER:
             return
         accepted = {}
         for who, reading in ((1, p1), (2, p2)):
-            if reading is None or not self._score_plausible(who, reading):
+            if reading is None:
+                continue
+            if not self._score_plausible(who, reading):
+                if self._current(who) is not None and reading < self._current(who):
+                    below = self._below_votes[who]
+                    below[reading] = below.get(reading, 0) + 1
                 continue
             votes = self._votes[who]
             votes[reading] = votes.get(reading, 0) + 1
@@ -179,13 +204,24 @@ class GameTracker:
         return old <= value <= old + MAX_PLAUSIBLE_JUMP      # scores never go down
 
     def _banner_plausible(self, banner: str) -> bool:
-        status = BANNER_STATUS.get(banner)
-        if status is None:
+        if banner not in BANNER_RANK:
             return False
-        rank, current = STATUS_RANK[status], STATUS_RANK[self.status]
         if self.status == GAME_OVER:
-            return status == 'q1'        # only a fresh game can follow a final
-        return current == 0 or rank >= current
+            return banner == '1ST QUARTER'       # only a fresh game can follow a final
+        return BANNER_RANK[banner] >= (BANNER_RANK[self.banner] if self.banner else 0)
+
+    def _restart_suspected(self, banner: str) -> bool:
+        """A lower-ranked banner that keeps being read while the scores go backwards too
+        means the game was reset without a team-select/match-up scene being seen. Both
+        are needed: a banner misread alone (OVERTIME read as HALFTIME, say) must not
+        wipe a game in progress."""
+        if self._back_votes.get(banner, 0) < RESTART_BANNER_VOTES or not self._is_plurality(self._back_votes, banner):
+            return False
+        return any(n >= RESTART_SCORE_VOTES for votes in self._below_votes.values() for n in votes.values())
+
+    def _restart(self, banner: str) -> None:
+        self._new_game(NOT_PLAYING)       # forget scores and banner, then start over from this banner
+        self._apply_banner(banner)
 
     def _apply_banner(self, banner: str) -> None:
         status = BANNER_STATUS[banner]
@@ -204,7 +240,7 @@ class GameTracker:
             if who in accepted and old[who] is not None and accepted[who] > old[who]:
                 self.events.append(Event('score', scorer=who, points=accepted[who] - old[who],
                                          player1=self.player1, player2=self.player2,
-                                         quarter=self.status))
+                                         quarter=Q1 if self.status == TIPOFF else self.status))
 
     # ---- emit helpers ----
     def _set_status(self, status: str) -> None:
